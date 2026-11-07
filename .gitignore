@@ -1,0 +1,37 @@
+# ---- build outputs ----
+/target/
+/dist/
+/installer/Output/
+*.pdb
+
+# ---- runtime data (server instances, worlds, multi-GB server versions, backups) ----
+/data/
+HyOrchestratorData/
+universe/
+*.part
+*.zip.part
+hytale-downloader*/
+.hytale-downloader-credentials.json
+auth.enc
+auth.key
+
+# ---- logs & temp ----
+*.log
+*.tmp
+
+# ---- editors / OS ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- local env / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Claude Code local settings (CLAUDE.md is committed) ----
+.claude/settings.local.json

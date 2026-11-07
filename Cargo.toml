@@ -1,0 +1,63 @@
+[package]
+name = "hyorchestrator"
+# The app version. scripts/bump-version.ps1 keeps Cargo.lock, the setup script and CHANGELOG.md in sync.
+version = "0.1.0"
+description = "HyOrchestrator - run and manage Hytale servers from one place. Made by Akulav."
+authors = ["Akulav"]
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/Akulav/hytale-server-orchestrator"
+publish = false
+
+[features]
+# `desktop` opens a native window (wry/tao). Without it the program is headless-only: the web UI on a port.
+# The Linux release ships both builds: hyorchestrator-linux-x64 (desktop) and -headless (no GUI libraries needed).
+default = ["desktop"]
+desktop = ["dep:wry", "dep:tao", "dep:png", "dep:muda"]
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["ws", "multipart"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dioxus = { version = "0.7", default-features = false, features = ["macro", "html", "signals", "hooks"] }
+dioxus-liveview = { version = "0.7", default-features = false, features = ["axum", "multi-thread"] }
+dirs = "6"
+flate2 = "1"
+futures = "0.3"
+open = "5"
+parking_lot = "0.12"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sysinfo = { version = "0.37", default-features = false, features = ["system"] }
+tar = "0.4"
+tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# desktop window
+png = { version = "0.18", optional = true }
+tao = { version = "0.37", optional = true }
+wry = { version = "0.57", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# macOS needs an app menu for Cmd+C / Cmd+V / Cmd+Q in the window
+[target.'cfg(target_os = "macos")'.dependencies]
+muda = { version = "0.17", optional = true }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
