@@ -26,54 +26,64 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
             PageHeader { title: "Server versions", subtitle: "Hytale server builds cached on this machine. Every instance picks one; updating is one click." }
             for t in tasks { TaskCard { key: "{t.id}", task: t, expanded: true } }
             div { class: "grid3",
-                div { class: "panel glass",
-                    h3 { Icon { name: "download" } " Official downloader" }
-                    p { class: "muted small", "HyOrchestrator fetches Hypixel's Hytale Downloader CLI by itself. The first time, a sign-in card appears with a code: open the page, approve with the Hytale account that owns the game, and the download starts. No token to paste." }
-                    if !mac {
-                        div { class: "account-row",
-                            if signed_in {
+                div { class: "panel glass source",
+                    div { class: "source-icon", Icon { name: "download" } }
+                    h3 { "Official downloader" }
+                    p { class: "muted small", "Fetched and run for you. The first time, approve a sign-in code with the Hytale account that owns the game - no token to paste." }
+                    div { class: "source-body",
+                        if mac {
+                            p { class: "warn-text small", "Hypixel publishes the downloader for Windows and Linux only. Use the launcher import on a Mac." }
+                        } else if signed_in {
+                            div { class: "account-row",
                                 span { class: "pill running sm", "Signed in" }
-                                span { class: "muted small grow", "Hytale login saved" }
-                                ConfirmButton { label: "Sign out", confirm: "Forget the saved login?", class: "sm ghost", disabled: false,
+                                span { class: "muted small grow", "login saved" }
+                                ConfirmButton { label: "Sign out", confirm: "Forget it?", class: "sm ghost", disabled: false,
                                     onconfirm: move |_| toast.result(versions::downloader_sign_out(&s4), "Signed out - the next download asks again")
                                 }
-                            } else {
+                            }
+                        } else {
+                            div { class: "account-row",
                                 span { class: "pill sm", "Not signed in" }
-                                span { class: "muted small grow", "you'll be asked on the first download" }
+                                span { class: "muted small grow", "asked on the first download" }
                             }
                         }
                     }
-                    if mac {
-                        p { class: "warn-text small", "Hytale publishes the downloader for Windows and Linux only. Use the launcher import on a Mac." }
-                    }
-                    div { class: "row",
+                    div { class: "source-actions",
                         button { class: "btn primary", disabled: mac, onclick: move |_| { actions::download_version(&s1, "release"); toast.ok("Download started"); }, "Latest release" }
-                        button { class: "btn", disabled: mac, onclick: move |_| { actions::download_version(&s2, "pre-release"); toast.ok("Download started"); }, "Latest pre-release" }
+                        button { class: "btn", disabled: mac, onclick: move |_| { actions::download_version(&s2, "pre-release"); toast.ok("Download started"); }, "Pre-release" }
                     }
                 }
-                div { class: "panel glass",
-                    h3 { Icon { name: "server" } " From your Hytale launcher" }
-                    p { class: "muted small", "Copies the Server folder and Assets.zip from the game installed on this computer." }
-                    if launcher.is_empty() { p { class: "muted small", "No Hytale launcher install found on this computer." } }
-                    for (patchline, folder) in launcher {
-                        {
-                            let st = state.clone();
-                            let (p2, f2) = (patchline.clone(), folder.clone());
-                            rsx! {
-                                div { key: "{patchline}", class: "row",
-                                    span { class: "grow small mono", title: "{folder.display()}", "{patchline}" }
-                                    button { class: "btn sm", onclick: move |_| { actions::import_launcher(&st, p2.clone(), f2.clone()); toast.ok("Import started"); }, "Import" }
+                div { class: "panel glass source",
+                    div { class: "source-icon", Icon { name: "server" } }
+                    h3 { "Hytale launcher" }
+                    p { class: "muted small", "Copies the server and Assets.zip from the game installed on this computer." }
+                    div { class: "source-body",
+                        if launcher.is_empty() { p { class: "muted small", "No Hytale launcher install found here." } }
+                    }
+                    div { class: "source-actions",
+                        for (patchline, folder) in launcher {
+                            {
+                                let st = state.clone();
+                                let (p2, f2) = (patchline.clone(), folder.clone());
+                                rsx! {
+                                    button { key: "{patchline}", class: "btn", title: "{folder.display()}",
+                                        onclick: move |_| { actions::import_launcher(&st, p2.clone(), f2.clone()); toast.ok("Import started"); },
+                                        "Import {patchline}"
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                div { class: "panel glass",
-                    h3 { Icon { name: "archive" } " From a zip or folder" }
-                    p { class: "muted small", "A path on the machine running HyOrchestrator: a server zip, or a folder with Server/HytaleServer.jar and Assets.zip." }
-                    div { class: "row",
-                        input { class: "input grow mono", placeholder: "/srv/hytale/game.zip", value: "{path}", oninput: move |e| path.set(e.value()) }
-                        button { class: "btn", onclick: move |_| { toast.result(actions::import_path(&s3, &path()), "Import started"); }, "Import" }
+                div { class: "panel glass source",
+                    div { class: "source-icon", Icon { name: "archive" } }
+                    h3 { "Zip or folder" }
+                    p { class: "muted small", "A path on the machine running HyOrchestrator: a server zip, or a folder with Server/ and Assets.zip." }
+                    div { class: "source-body",
+                        input { class: "input mono", placeholder: "/srv/hytale/game.zip", value: "{path}", oninput: move |e| path.set(e.value()) }
+                    }
+                    div { class: "source-actions",
+                        button { class: "btn", disabled: path().trim().is_empty(), onclick: move |_| { toast.result(actions::import_path(&s3, &path()), "Import started"); }, "Import" }
                     }
                 }
             }

@@ -15,7 +15,7 @@
 
 #ifndef AppVersion
   ; scripts\bump-version.ps1 keeps this in sync with Cargo.toml
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef Exe
   #define Exe "..\target\release\hyorchestrator.exe"
@@ -95,10 +95,14 @@ Filename: "{app}\hyorchestrator.exe"; Parameters: "--after-update"; WorkingDir: 
 Type: files; Name: "{app}\hyorchestrator.exe.old"
 
 [Code]
-// The data folder (instances, versions, backups) - the program's default --data-dir.
+// The data folder (instances, worlds, versions, backups): "data" next to the program, in the folder
+// chosen on the folder page. (Before 0.3 it was always %LOCALAPPDATA%\HyOrchestrator\data; the program
+// moves it here on its first start when both are on the same drive.)
 function DataDir(): String;
 begin
-  Result := ExpandConstant('{localappdata}\{#Name}\data');
+  Result := ExpandConstant('{app}\data');
+  if not DirExists(Result) then
+    Result := ExpandConstant('{localappdata}\{#Name}\data');
 end;
 
 // A running HyOrchestrator from this folder is asked to close, then ended (it stops its servers first

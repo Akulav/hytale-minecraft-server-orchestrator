@@ -26,6 +26,7 @@ fn sample(state: &Shared, sys: &mut System, cpus: usize) {
     sys.refresh_cpu_usage();
     sys.refresh_memory();
     let pids: Vec<(String, u32)> = state.runtimes.read().iter().filter_map(|(id, r)| r.pid.map(|p| (id.clone(), p))).collect();
+    let players: usize = state.runtimes.read().values().map(|r| r.players.len()).sum();
     let list: Vec<Pid> = pids.iter().map(|(_, p)| Pid::from_u32(*p)).collect();
     sys.refresh_processes_specifics(ProcessesToUpdate::Some(&list), true, ProcessRefreshKind::nothing().with_cpu().with_memory());
     {
@@ -36,7 +37,7 @@ fn sample(state: &Shared, sys: &mut System, cpus: usize) {
         h.ram_used_mb = sys.used_memory() / (1024 * 1024);
         let ram_pct = if h.ram_total_mb > 0 { h.ram_used_mb as f32 * 100.0 / h.ram_total_mb as f32 } else { 0.0 };
         let cpu = h.cpu;
-        h.history.push_back((cpu, ram_pct));
+        h.history.push_back((cpu, ram_pct, players as f32));
         while h.history.len() > HISTORY_CAP {
             h.history.pop_front();
         }

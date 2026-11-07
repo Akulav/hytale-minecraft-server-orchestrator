@@ -5,6 +5,7 @@
 
 #![cfg_attr(all(windows, feature = "desktop", not(debug_assertions)), windows_subsystem = "windows")]
 
+mod account;
 mod actions;
 mod archive;
 mod backup;
@@ -14,6 +15,7 @@ mod download;
 mod instance;
 mod java;
 mod login;
+mod net;
 mod process;
 mod state;
 mod telemetry;
@@ -134,18 +136,10 @@ fn attach_console() {
     }
 }
 
-/// This computer's address on the local network (no packet is sent).
-fn lan_ip() -> Option<IpAddr> {
-    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
-    s.connect("192.0.2.1:9").ok()?;
-    let ip = s.local_addr().ok()?.ip();
-    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
-}
-
 fn urls_for(host: IpAddr, port: u16, token: &str) -> Vec<String> {
     let mut out = vec![format!("http://127.0.0.1:{port}/?token={token}")];
     if host.is_unspecified() {
-        if let Some(ip) = lan_ip() {
+        if let Some(ip) = net::lan_ip() {
             out.push(format!("http://{ip}:{port}/?token={token}"));
         }
     } else if !host.is_loopback() {
@@ -194,8 +188,15 @@ fn main() {
         return;
     }
 
-    let paths = Paths::new(args.data_dir.clone().unwrap_or_else(Paths::default_root));
+    let (root, data_note) = match args.data_dir.clone() {
+        Some(d) => (d, None),
+        None => Paths::default_root(),
+    };
+    let paths = Paths::new(root);
     init_log(&paths.logs);
+    if let Some(note) = data_note {
+        logln(&format!("data folder: {note}"));
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().thread_name("hyo").build().expect("tokio runtime");
     let state = match AppState::load(paths, mode, runtime.handle().clone()) {
         Ok(s) => s,
@@ -235,6 +236,8 @@ fn main() {
 
     telemetry::spawn(state.clone());
     updater::spawn_background(state.clone());
+    account::spawn_keepalive(state.clone());
+    net::spawn_public_ip(state.clone());
     {
         let st = state.clone();
         runtime.spawn(async move {

@@ -1,7 +1,7 @@
 [package]
 name = "hyorchestrator"
 # The app version. scripts/bump-version.ps1 keeps Cargo.lock, the setup script and CHANGELOG.md in sync.
-version = "0.2.0"
+version = "0.3.0"
 description = "HyOrchestrator - run and manage Hytale servers from one place. Made by Akulav."
 authors = ["Akulav"]
 edition = "2024"

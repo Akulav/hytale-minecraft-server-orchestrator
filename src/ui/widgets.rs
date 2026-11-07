@@ -34,7 +34,9 @@ fn icon_svg(name: &str) -> &'static str {
         "refresh" => r#"<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>"#,
         "alert" => r#"<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/>"#,
         "key" => r#"<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>"#,
-        "server" => r#"<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>"#,
+        "chevron" => r#"<path d="m9 18 6-6-6-6"/>"#,
+        "skull" => r#"<path d="M12 2a8 8 0 0 0-8 8c0 2.9 1.5 5.3 4 6.7V20a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.3c2.5-1.4 4-3.8 4-6.7a8 8 0 0 0-8-8z"/><circle cx="9" cy="11" r="1.5"/><circle cx="15" cy="11" r="1.5"/><path d="M10 21v-2M14 21v-2"/>"#,
+        "server" =>r#"<rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>"#,
         _ => r#"<circle cx="12" cy="12" r="9"/>"#,
     }
 }
@@ -52,7 +54,7 @@ pub fn Icon(name: &'static str) -> Element {
 pub fn PageHeader(title: String, subtitle: String, children: Element) -> Element {
     rsx! {
         header { class: "page-header",
-            div {
+            div { class: "page-title",
                 h1 { "{title}" }
                 if !subtitle.is_empty() { p { class: "muted", "{subtitle}" } }
             }
@@ -87,7 +89,8 @@ pub fn Banner(kind: &'static str, icon: &'static str, children: Element) -> Elem
 #[component]
 pub fn Spark(values: Vec<f32>, max: f32, class: &'static str) -> Element {
     if values.len() < 2 {
-        return rsx! { svg { class: "spark {class}", view_box: "0 0 100 30", preserve_aspect_ratio: "none" } };
+        // no data yet: a flat baseline keeps the card's shape
+        return rsx! { svg { class: "spark {class} idle", view_box: "0 0 100 30", preserve_aspect_ratio: "none", polyline { class: "line", points: "0,29 100,29" } } };
     }
     let max = if max > 0.0 { max } else { values.iter().cloned().fold(1.0, f32::max) };
     let n = values.len() as f32 - 1.0;
@@ -102,15 +105,36 @@ pub fn Spark(values: Vec<f32>, max: f32, class: &'static str) -> Element {
     }
 }
 
+/// A stat card: label, big value, one line of detail and a fixed-height footer (chart or meter), so a row
+/// of them always lines up.
 #[component]
 pub fn Stat(icon: &'static str, label: String, value: String, sub: String, children: Element) -> Element {
     rsx! {
         div { class: "stat glass",
-            div { class: "stat-head", Icon { name: icon } span { "{label}" } }
+            div { class: "stat-head", span { class: "stat-icon", Icon { name: icon } } span { "{label}" } }
             div { class: "stat-value", "{value}" }
-            if !sub.is_empty() { div { class: "stat-sub muted", "{sub}" } }
-            {children}
+            div { class: "stat-sub muted", if sub.is_empty() { "\u{a0}" } else { "{sub}" } }
+            div { class: "stat-foot", {children} }
         }
+    }
+}
+
+/// A thin horizontal meter (0..1).
+#[component]
+pub fn Meter(value: f32, class: &'static str) -> Element {
+    let pct = (value.clamp(0.0, 1.0) * 100.0).round();
+    rsx! { div { class: "meter {class}", div { class: "fill", style: "width: {pct}%" } } }
+}
+
+/// Panel title row: title on the left, actions on the right, an optional description below.
+#[component]
+pub fn PanelHead(title: String, icon: Option<&'static str>, #[props(default)] desc: String, children: Element) -> Element {
+    rsx! {
+        div { class: "panel-head",
+            h3 { if let Some(i) = icon { Icon { name: i } } "{title}" }
+            div { class: "panel-actions", {children} }
+        }
+        if !desc.is_empty() { p { class: "panel-desc muted", "{desc}" } }
     }
 }
 
@@ -201,7 +225,7 @@ pub fn TaskCard(task: Task, expanded: bool) -> Element {
             div { class: "task-msg", Linkified { text: task.message.clone() } }
             if let Some(l) = task.login.clone() {
                 LoginCard { title: "Sign in to Hytale", url: l.url, code: l.code,
-                    note: "The official Hytale downloader needs your Hytale account once (the one that owns the game). Open the page, check the code matches and approve. The login is saved for next time." }
+                    note: "Open the page, check that the code matches and approve with the Hytale account that owns the game. The login is saved, so this is a one-time step." }
             }
             if task.status == TaskStatus::Running && task.login.is_none() { Progress { value: task.progress } }
             if open() && !tail.is_empty() {

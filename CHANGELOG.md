@@ -5,6 +5,24 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+### Added
+- **Hytale account - sign in once for every server** (Settings → Hytale account, or step 3 of Get started). Uses
+  Hytale's official server token flow: each server start gets a fresh game session passed in through
+  `HYTALE_SERVER_SESSION_TOKEN` / `HYTALE_SERVER_IDENTITY_TOKEN` and `--owner-uuid`, so servers no longer ask for a
+  code when they start. The login refreshes itself; it only needs renewing after 30 days without HyOrchestrator.
+- Connect panel: the **local network** and **internet** address (IP + port) of each server, each with a Copy button.
+- Dashboard **Get started** strip: Java → server files → Hytale account → your server, with the next action on each step.
+
+### Changed
+- Data (instances, worlds, versions, backups) now lives in a `data` folder **next to the program**, i.e. in the
+  folder chosen at install time. Data from older versions (`%LOCALAPPDATA%\HyOrchestrator\data`) is moved there on
+  the first start of an installed copy when both are on the same drive; `--data-dir` still overrides it.
+- Refreshed design: one spacing scale and control height, stat cards with a fixed footer (chart or meter) in a
+  strict 4 / 2 / 1 column grid, equal-height panels, an instance header with status avatar, chips and one action
+  bar, full-width equal tabs, symmetric instance cards (Start / Manage), identical source cards on Server versions,
+  and two-column forms. Sidebar: a "+" next to Instances.
+
 ## [0.2.0] - 2026-11-07
 ### Added
 - Effortless Hytale sign-in: when the official downloader or a server needs your Hytale account, a

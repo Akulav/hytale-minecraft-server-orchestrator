@@ -57,6 +57,10 @@ src/
   backup.rs     world + mods zips, restore (safety backup first)
   actions.rs    background tasks: 1-click update, version switch, backup/restore, downloads, Java install
   java.rs       Java 25 detection, Temurin 25 install (Adoptium API)
+  account.rs    Hytale account: device-code sign-in once (client hytale-server), refresh-token rotation (saved
+                under a lock), game session per server start → HYTALE_SERVER_SESSION/IDENTITY_TOKEN + --owner-uuid
+  login.rs      parses sign-in prompts (downloader + server console) for the LoginCard; auto-open in desktop mode
+  net.rs        LAN IP, public IP (api.ipify.org, every 30 min) for the Connect panel's Copy buttons
   telemetry.rs  2 s sampler (sysinfo): machine + per-server CPU/RAM/players history
   updater.rs    GitHub releases check, SHA-256 verified install, Windows setup / Unix swap + relaunch
   archive.rs    zip extract/pack, tree copy; download.rs HTTP download with task progress
@@ -85,6 +89,11 @@ scripts/        bump-version.ps1, make-icons.ps1
 - Player join/leave lines are matched by heuristics (`process.rs` `JOIN_PATTERNS`); users can override in Settings.
 
 ## Conventions & gotchas
+- Data folder (`Paths::default_root`): `data/` next to the program; per-user folder for builds from source
+  (`…/target/…`), the macOS bundle, or a read-only program folder. Old per-user data is moved only by an installed
+  copy (uninstaller next to it). Never test that move against the real `%LOCALAPPDATA%\HyOrchestrator\data`.
+- Server sign-in order: saved Hytale account (token passthrough, no prompt) → else the server's own device prompt
+  (auto-started, `/auth persistence Encrypted` after success). Tokens go in env vars, never in logged arguments.
 - Never hold a `parking_lot` guard across `.await`.
 - Server processes end with HyOrchestrator even on a crash: Windows job object (`process::job`, kill-on-close),
   Linux `PR_SET_PDEATHSIG`. A normal quit / window close stops them cleanly with `/stop` first (`stop_all`).

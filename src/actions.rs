@@ -119,6 +119,14 @@ pub fn import_path(state: &Shared, path: &str) -> Result<String> {
     }))
 }
 
+/// Signs the Hytale account in once (device code); every server then starts signed in.
+pub fn sign_in_account(state: &Shared) -> Result<String> {
+    if crate::account::signing_in() {
+        bail!("a sign-in is already waiting - approve the code shown on the card");
+    }
+    Ok(spawn_task(state, "Sign in to Hytale (all servers)", None, crate::account::sign_in))
+}
+
 pub fn install_java(state: &Shared) -> String {
     spawn_task(state, "Install Java 25 (Eclipse Temurin)", None, crate::java::install_temurin)
 }

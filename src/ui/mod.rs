@@ -158,6 +158,8 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
     let current = nav();
     let item = |p: Page| if current == p { "nav-item active" } else { "nav-item" };
     let desktop = state.mode == Mode::Desktop;
+    let no_instances = instances.is_empty();
+    let create_class = format!("{} add", item(Page::Create));
     let first_url = urls.first().cloned().unwrap_or_default();
     let net_url = urls.get(1).cloned();
 
@@ -172,7 +174,10 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
             }
             nav { class: "nav",
                 button { class: item(Page::Dashboard), onclick: move |_| nav.set(Page::Dashboard), Icon { name: "grid" } "Dashboard" }
-                div { class: "nav-section", "Instances" }
+                div { class: "nav-section",
+                    span { "Instances" }
+                    button { class: "nav-add", title: "New instance", onclick: move |_| nav.set(Page::Create), Icon { name: "plus" } }
+                }
                 for inst in instances {
                     {
                         let id = inst.id.clone();
@@ -189,7 +194,9 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
                         }
                     }
                 }
-                button { class: "{item(Page::Create)} add", onclick: move |_| nav.set(Page::Create), Icon { name: "plus" } "New instance" }
+                if no_instances {
+                    button { class: create_class, onclick: move |_| nav.set(Page::Create), Icon { name: "plus" } "New instance" }
+                }
                 div { class: "nav-section", "Manage" }
                 button { class: item(Page::Versions), onclick: move |_| nav.set(Page::Versions), Icon { name: "layers" } "Server versions" }
                 button { class: item(Page::Tasks), onclick: move |_| nav.set(Page::Tasks), Icon { name: "activity" } "Tasks"

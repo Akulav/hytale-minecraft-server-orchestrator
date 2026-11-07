@@ -87,9 +87,10 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
    you), approve with the account that owns Hytale, and the download continues by itself. No token to paste; the
    login is saved. (Or **Import** the files of your installed Hytale launcher.)
 4. **New instance** → name, version, port, seed → **Create** → **Start**.
-5. First start only: the server must be signed in too. HyOrchestrator starts the sign-in by itself and shows the
-   same card on the instance page; approve it once and the login is saved for restarts. Players then join on
-   `your-ip:5520` (UDP).
+5. **Settings → Hytale account → Sign in** once (also step 3 of *Get started* on the dashboard). From then on every
+   server starts already signed in - no code per server or per start. (Skip it and each server asks for its own
+   code, which HyOrchestrator also shows as a card.) Players join on the address in **Connect** (Copy buttons for
+   local and internet), UDP.
 
 > [!TIP]
 > On a Linux server without a display, just run `./hyorchestrator-linux-x64-headless`: it prints a link like
@@ -109,9 +110,14 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
 
 | System | File | Where it lives | Shortcuts |
 |---|---|---|---|
-| Windows | `HyOrchestrator-setup.exe`: a wizard with a license page, a **folder you can change** and a **desktop icon** choice; per user, no admin rights | `%LOCALAPPDATA%\HyOrchestrator` (data in `data\`) | Start menu (+ "headless web UI"), desktop, *Settings → Apps* |
-| macOS | `HyOrchestrator-macos-arm64.dmg`: drag HyOrchestrator to Applications | data in `~/Library/Application Support/HyOrchestrator/data` | Applications |
-| Linux | `hyorchestrator-linux-x64` (window) or `hyorchestrator-linux-x64-headless` (web only): `chmod +x` and run | data in `~/.local/share/HyOrchestrator/data` | - |
+| Windows | `HyOrchestrator-setup.exe`: a wizard with a license page, a **folder you can change** and a **desktop icon** choice; per user, no admin rights | the folder you pick (default `%LOCALAPPDATA%\HyOrchestrator`); servers, worlds and backups in its `data\` | Start menu (+ "headless web UI"), desktop, *Settings → Apps* |
+| macOS | `HyOrchestrator-macos-arm64.dmg`: drag HyOrchestrator to Applications | data in `~/Library/Application Support/HyOrchestrator/data` (never inside the app) | Applications |
+| Linux | `hyorchestrator-linux-x64` (window) or `hyorchestrator-linux-x64-headless` (web only): `chmod +x` and run | `data/` next to the program (or `~/.local/share/HyOrchestrator/data` if that folder is read-only) | - |
+
+Everything HyOrchestrator keeps - instances, worlds, mods, server versions, backups, Java, settings - is in that one
+`data` folder next to the program; `--data-dir <path>` puts it anywhere else. Data from versions before 0.3
+(`%LOCALAPPDATA%\HyOrchestrator\data`) is moved next to an installed program on its first start when both are
+on the same drive.
 
 **Updating.** HyOrchestrator checks GitHub 15 seconds after it starts and every 6 hours (Settings can turn that
 off), or when you press **About → Check for updates**. **Download & install** fetches this system's file, checks it
@@ -206,7 +212,10 @@ flowchart LR
 ## 🔒 Privacy and safety
 
 - Everything stays on your machine. HyOrchestrator talks to the internet only to download the Hytale downloader /
-  server files (Hypixel), Temurin Java (Adoptium) and its own updates (GitHub).
+  server files (Hypixel), Temurin Java (Adoptium) and its own updates (GitHub), to sign servers in with your Hytale
+  account (Hypixel's OAuth and session services), and to look up your public IP for the Copy button (api.ipify.org).
+- The Hytale account login (a refresh token) is kept in `data/hytale-account.json` (owner-only permissions on
+  Linux / macOS). Settings → Hytale account → **Sign out** deletes it.
 - The web UI requires a random 256-bit token; cookies are `HttpOnly; SameSite=Strict` and cross-origin requests are
   refused. Desktop mode listens on `127.0.0.1` only unless you allow the network in Settings.
 - Uploaded mods are checked (name, `.jar` / `.zip`, zip signature) and land only in that instance's `mods/` folder.

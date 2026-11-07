@@ -3,7 +3,7 @@
 
 use dioxus::prelude::*;
 
-use super::{Banner, ConfirmButton, Empty, Icon, Linkified, LoginCard, Page, Spark, Stat, TaskCard, run_job, use_state, use_toast};
+use super::{Banner, ConfirmButton, Empty, Icon, Linkified, LoginCard, Meter, Page, PanelHead, Spark, Stat, TaskCard, run_job, use_state, use_toast};
 use crate::state::{LogKind, Mode, Status, human_bytes, human_duration, now_ms};
 use crate::{actions, backup, instance, process};
 
@@ -47,15 +47,23 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
 
     rsx! {
         div { class: "page",
-            header { class: "page-header inst-header",
-                div {
-                    div { class: "title-row",
-                        h1 { "{inst.name}" }
-                        span { class: "pill {status_css}", "{status_label}" }
+            header { class: "inst-header glass",
+                div { class: "inst-id",
+                    div { class: "inst-avatar {status_css}", Icon { name: "server" } }
+                    div {
+                        div { class: "title-row",
+                            h1 { "{inst.name}" }
+                            span { class: "pill {status_css}", span { class: "dot {status_css}" } "{status_label}" }
+                        }
+                        div { class: "chips",
+                            span { class: "chip", "Hytale {inst.version}" }
+                            span { class: "chip", "{inst.patchline}" }
+                            span { class: "chip", "UDP {inst.port}" }
+                            span { class: "chip", "{inst.max_memory_mb / 1024} GB RAM" }
+                        }
                     }
-                    p { class: "muted", "Hytale {inst.version} ({inst.patchline}) · UDP port {inst.port} · {inst.max_memory_mb / 1024} GB max RAM" }
                 }
-                div { class: "header-actions",
+                div { class: "action-bar",
                     if status.is_active() {
                         button { class: "btn", disabled: status == Status::Stopping || busy,
                             onclick: move |_| { let id = i1.clone(); run_job(&s1, toast, move |st| async move { process::stop(&st, &id).await.map(|_| String::new()) }) },
@@ -64,9 +72,6 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
                         button { class: "btn", disabled: status == Status::Stopping || busy,
                             onclick: move |_| { let id = i2.clone(); run_job(&s2, toast, move |st| async move { process::restart(&st, &id).await.map(|_| String::new()) }) },
                             Icon { name: "restart" } "Restart"
-                        }
-                        ConfirmButton { label: "Kill", confirm: "Kill without saving?", class: "ghost danger-text", disabled: false,
-                            onconfirm: move |_| process::kill(&s3, &i3)
                         }
                     } else {
                         button { class: "btn primary", disabled: busy,
@@ -78,17 +83,22 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
                         onclick: move |_| toast.result(actions::update_instance(&s5, &i5), "Update started - progress below"),
                         Icon { name: "zap" } "Update"
                     }
-                    button { class: "btn", disabled: busy,
+                    button { class: "btn", disabled: busy, title: "Back up world + mods now",
                         onclick: move |_| toast.result(actions::backup_now(&s6, &i6, String::new()), "Backup started"),
                         Icon { name: "archive" } "Back up"
+                    }
+                    if status.is_active() {
+                        ConfirmButton { label: "Kill", confirm: "Kill without saving?", class: "ghost danger-text", disabled: false,
+                            onconfirm: move |_| process::kill(&s3, &i3)
+                        }
                     }
                 }
             }
             if let Some(t) = task { TaskCard { task: t, expanded: true } }
             nav { class: "tabs",
                 for (t, label, icon) in TABS {
-                    button { key: "{label}", class: if current == t { "tab active" } else { "tab" }, onclick: move |_| tab.set(t),
-                        Icon { name: icon } "{label}"
+                    button { key: "{label}", class: if current == t { "tab active" } else { "tab" }, title: "{label}", onclick: move |_| tab.set(t),
+                        Icon { name: icon } span { class: "tab-label", "{label}" }
                     }
                 }
             }
@@ -133,7 +143,10 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
     let cpu_hist: Vec<f32> = hist.iter().map(|s| s.cpu).collect();
     let ram_hist: Vec<f32> = hist.iter().map(|s| s.ram_mb as f32).collect();
     let pl_hist: Vec<f32> = hist.iter().map(|s| s.players as f32).collect();
-    let lan = local_ip();
+    let lan_addr = format!("{}:{}", local_ip(), inst.port);
+    let public_addr = state.public_ip.read().clone().map(|ip| if ip.contains(':') { format!("[{ip}]:{}", inst.port) } else { format!("{ip}:{}", inst.port) });
+    let has_account = crate::account::load(&state).is_some();
+    let s_acc = state.clone();
     let (s1, s2, i1, i2) = (state.clone(), state.clone(), id.clone(), id.clone());
     let worlds = instance::list_worlds(&state, &id).len();
     let mods = instance::list_mods(&state, &id).iter().filter(|m| m.enabled).count();
@@ -143,7 +156,16 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
         if needs_auth && status.is_active() {
             if let Some(url) = auth_url.clone() {
                 LoginCard { title: "Sign this server in to Hytale", url, code: auth_code.clone().unwrap_or_default(),
-                    note: "Hytale servers must be signed in before players can join. Open the page, check the code and approve with your Hytale account. The login is then saved for restarts." }
+                    note: "Hytale servers must be signed in before players can join. Open the page, check the code and approve with your Hytale account." }
+                if !has_account {
+                    Banner { kind: "info", icon: "key",
+                        b { "Tired of codes? " }
+                        "Sign in once in Settings and every server - this one included, from its next start - signs in by itself."
+                        div { class: "banner-actions",
+                            button { class: "btn sm primary", onclick: move |_| toast.result(crate::actions::sign_in_account(&s_acc), "Sign-in started - approve the code (Settings shows it too)"), "Sign in once for all servers" }
+                        }
+                    }
+                }
             } else {
                 Banner { kind: "warn", icon: "key",
                     b { "This server needs to sign in to Hytale before players can join. " }
@@ -175,22 +197,37 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
             Stat { icon: "users", label: "Players", value: format!("{}", players.len()), sub: if players.is_empty() { "nobody online".to_string() } else { players.join(", ") },
                 Spark { values: pl_hist, max: 0.0, class: "green" }
             }
-            Stat { icon: "clock", label: "Uptime", value: uptime.unwrap_or_else(|| "-".into()), sub: status.label().to_string() }
+            Stat { icon: "clock", label: "Uptime", value: uptime.unwrap_or_else(|| "-".into()), sub: status.label().to_string(),
+                div { class: "foot-meter", Meter { value: if status == Status::Running { 1.0 } else if status.is_active() { 0.5 } else { 0.0 }, class: "green" } }
+            }
         }
-        div { class: "grid2",
+        div { class: "grid2 equal",
             div { class: "panel glass",
-                h3 { "Connect" }
-                p { "Players join with " b { "{lan}:{inst.port}" } " on your network, or your public IP / domain with the same port." }
-                p { class: "muted small", "Hytale uses QUIC over UDP: forward and allow UDP {inst.port} (not TCP)." }
-                div { class: "kv",
-                    span { "Worlds" } b { "{worlds}" }
-                    span { "Active mods" } b { "{mods}" }
-                    span { "Operators" } b { "{inst.operators.len()}" }
-                    span { "Auth mode" } b { if inst.offline_auth { "offline (LAN tests)" } else { "authenticated" } }
+                PanelHead { title: "Connect", icon: Some("globe") }
+                div { class: "addresses",
+                    div { class: "address",
+                        span { class: "address-label", Icon { name: "server" } "Local network" }
+                        code { class: "address-value", "{lan_addr}" }
+                        button { class: "btn sm", "data-copy": "{lan_addr}", "Copy" }
+                    }
+                    div { class: "address",
+                        span { class: "address-label", Icon { name: "globe" } "Internet" }
+                        code { class: "address-value", if let Some(p) = public_addr.clone() { "{p}" } else { "looking up…" } }
+                        button { class: "btn sm", disabled: public_addr.is_none(), "data-copy": "{public_addr.clone().unwrap_or_default()}", "Copy" }
+                    }
+                    p { class: "muted small center", "Friends outside your network need UDP {inst.port} forwarded to this computer (Hytale uses QUIC, not TCP)." }
+                }
+                div { class: "facts",
+                    div { b { "{worlds}" } span { "Worlds" } }
+                    div { b { "{mods}" } span { "Active mods" } }
+                    div { b { "{inst.operators.len()}" } span { "Operators" } }
+                    div { b { if inst.offline_auth { "Offline" } else { "Online" } } span { "Auth mode" } }
                 }
             }
             div { class: "panel glass",
-                div { class: "panel-head", h3 { "Latest console output" } button { class: "btn sm ghost", onclick: move |_| tab.set(Tab::Console), "Open console" } }
+                PanelHead { title: "Latest console output", icon: Some("terminal"),
+                    button { class: "btn sm ghost", onclick: move |_| tab.set(Tab::Console), "Open console" Icon { name: "chevron" } }
+                }
                 pre { class: "log mini",
                     if tail.is_empty() { span { class: "muted", "The server has not printed anything yet." } }
                     for l in tail {
@@ -212,8 +249,7 @@ fn log_class(kind: LogKind) -> &'static str {
 }
 
 fn local_ip() -> String {
-    let ip = std::net::UdpSocket::bind("0.0.0.0:0").ok().and_then(|s| s.connect("192.0.2.1:9").ok().map(|_| s)).and_then(|s| s.local_addr().ok()).map(|a| a.ip().to_string());
-    ip.unwrap_or_else(|| "this-computer".into())
+    crate::net::lan_ip().map(|ip| ip.to_string()).unwrap_or_else(|| "127.0.0.1".into())
 }
 
 #[component]
@@ -567,7 +603,7 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
 
     rsx! {
         div { class: "grid2",
-            div { class: "panel glass",
+            div { class: "panel glass form",
                 h3 { "Server" }
                 label { class: "field", span { "Name" } input { class: "input", value: "{f.name}", oninput: move |e| form.write().name = e.value() } }
                 label { class: "field", span { "UDP port" }

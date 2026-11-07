@@ -67,10 +67,62 @@ impl Paths {
         }
     }
 
-    /// Default: `%LOCALAPPDATA%\HyOrchestrator\data`, `~/.local/share/HyOrchestrator/data`,
-    /// `~/Library/Application Support/HyOrchestrator/data`.
-    pub fn default_root() -> PathBuf {
+    /// The per-user location: `%LOCALAPPDATA%\HyOrchestrator\data`, `~/.local/share/HyOrchestrator/data`,
+    /// `~/Library/Application Support/HyOrchestrator/data`. Used when the program's own folder can't hold
+    /// the data (macOS app bundle, read-only folder, a build from source) and by versions before 0.3.
+    pub fn user_root() -> PathBuf {
         dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join(APP_NAME).join("data")
+    }
+
+    /// Where the data goes by default: a `data` folder next to the program, i.e. in the folder chosen
+    /// at install time. Returns the folder and a note for the log (a move or a fallback).
+    pub fn default_root() -> (PathBuf, Option<String>) {
+        let legacy = Self::user_root();
+        match std::env::current_exe() {
+            Ok(exe) => Self::choose_root(&exe, legacy),
+            Err(_) => (legacy, None),
+        }
+    }
+
+    /// `default_root` for a given program path and per-user folder (testable).
+    pub fn choose_root(exe: &Path, legacy: PathBuf) -> (PathBuf, Option<String>) {
+        let exe = exe.to_path_buf();
+        let in_bundle = cfg!(target_os = "macos") && crate::updater::app_bundle(&exe).is_some();
+        if crate::updater::self_built(&exe) || in_bundle {
+            return (legacy, None);
+        }
+        let Some(dir) = exe.parent() else { return (legacy, None) };
+        let here = dir.join("data");
+        if here.is_dir() || here == legacy {
+            return (here, None);
+        }
+        if !writable(dir) {
+            return (legacy.clone(), Some(format!("{} is read-only: data stays in {}", dir.display(), legacy.display())));
+        }
+        if legacy.is_dir() {
+            // data from an older version. Only an installed copy (the setup's uninstaller sits next to it)
+            // takes it over, so a stray copy run from Downloads never moves the real data away.
+            let installed = std::fs::read_dir(dir).map(|rd| rd.flatten().any(|e| {
+                let n = e.file_name().to_string_lossy().to_lowercase();
+                n.starts_with("unins") && n.ends_with(".exe")
+            }));
+            if !installed.unwrap_or(false) {
+                return (legacy, None);
+            }
+            // bring it next to the program (instant on the same drive)
+            return match std::fs::rename(&legacy, &here) {
+                Ok(()) => (here.clone(), Some(format!("moved the data from {} to {}", legacy.display(), here.display()))),
+                Err(e) => (
+                    legacy.clone(),
+                    Some(format!(
+                        "data stays in {} (it could not be moved next to the program: {e}). Move the folder to {} by hand, or start with --data-dir.",
+                        legacy.display(),
+                        here.display()
+                    )),
+                ),
+            };
+        }
+        (here, None)
     }
 
     pub fn create_all(&self) -> Result<()> {
@@ -100,6 +152,14 @@ impl Paths {
     fn registry_file(&self) -> PathBuf {
         self.root.join("instances.json")
     }
+}
+
+/// Can we create files in `dir`?
+fn writable(dir: &Path) -> bool {
+    let probe = dir.join(format!(".hyo-write-test-{}", std::process::id()));
+    let ok = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    ok
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -324,7 +384,8 @@ pub struct HostStats {
     pub ram_used_mb: u64,
     pub ram_total_mb: u64,
     pub cpus: usize,
-    pub history: VecDeque<(f32, f32)>,
+    /// (cpu %, ram %, players online across all servers)
+    pub history: VecDeque<(f32, f32, f32)>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -356,6 +417,8 @@ pub struct AppState {
     pub mode: Mode,
     /// how to reach the web UI (with the token), e.g. http://127.0.0.1:7520/?token=…
     pub urls: RwLock<Vec<String>>,
+    /// this network's public IP (for the "copy public address" button)
+    pub public_ip: RwLock<Option<String>>,
     changes: watch::Sender<u64>,
     pub quitting: AtomicBool,
     pub quit: tokio::sync::Notify,
@@ -389,6 +452,7 @@ impl AppState {
             rt,
             mode,
             urls: RwLock::new(Vec::new()),
+            public_ip: RwLock::new(None),
             changes,
             quitting: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),
@@ -628,6 +692,39 @@ mod tests {
         let i: InstanceConfig = serde_json::from_str(r#"{"id": "a", "name": "x"}"#).unwrap();
         assert_eq!(i.port, DEFAULT_GAME_PORT);
         assert_eq!(i.patchline, "release");
+    }
+
+    #[test]
+    fn data_lives_next_to_the_installed_program() {
+        let t = std::env::temp_dir().join(format!("hyo-root-{}", new_id()));
+        let app = t.join("Games").join("HyOrchestrator");
+        let legacy = t.join("LocalAppData").join("HyOrchestrator").join("data");
+        std::fs::create_dir_all(&app).unwrap();
+        let exe = app.join("hyorchestrator.exe");
+        std::fs::write(&exe, b"").unwrap();
+
+        // fresh install, nothing old: data next to the program
+        assert_eq!(Paths::choose_root(&exe, legacy.clone()).0, app.join("data"));
+
+        // old data + a stray copy (no uninstaller next to it): the old data is not touched
+        std::fs::create_dir_all(legacy.join("instances")).unwrap();
+        assert_eq!(Paths::choose_root(&exe, legacy.clone()), (legacy.clone(), None));
+        assert!(legacy.is_dir());
+
+        // old data + an installed copy: moved next to the program
+        std::fs::write(app.join("unins000.exe"), b"").unwrap();
+        let (root, note) = Paths::choose_root(&exe, legacy.clone());
+        assert_eq!(root, app.join("data"));
+        assert!(note.unwrap().contains("moved"));
+        assert!(app.join("data").join("instances").is_dir() && !legacy.exists());
+
+        // from now on that folder is used as it is
+        assert_eq!(Paths::choose_root(&exe, legacy.clone()), (app.join("data"), None));
+
+        // a build from source keeps using the per-user folder
+        let dev = t.join("repo").join("target").join("debug").join("hyorchestrator.exe");
+        assert_eq!(Paths::choose_root(&dev, legacy.clone()).0, legacy);
+        let _ = std::fs::remove_dir_all(t);
     }
 
     #[test]

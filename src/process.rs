@@ -144,9 +144,27 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
         bail!("Assets.zip of version {} is missing - download the version again", inst.version);
     }
     let java = crate::java::require(state).await?;
-    let args = server_args(&inst, &assets, dir.join("HytaleServer.aot").is_file());
+    let mut args = server_args(&inst, &assets, dir.join("HytaleServer.aot").is_file());
+
+    // the saved Hytale account signs the server in: no prompt (token passthrough, see account.rs)
+    let mut session = None;
+    if !inst.offline_auth {
+        match crate::account::session_for_server(state).await {
+            Ok(Some((s, i, owner))) => {
+                args.push("--owner-uuid".into());
+                args.push(owner);
+                session = Some((s, i));
+            }
+            Ok(None) => {}
+            Err(e) => state.system_log(id, format!("Hytale account: {e:#} - the server will ask to sign in instead")),
+        }
+    }
 
     let mut cmd = std::process::Command::new(&java);
+    if let Some((s, i)) = &session {
+        // environment, not arguments: tokens never show up in the logged command line
+        cmd.env("HYTALE_SERVER_SESSION_TOKEN", s).env("HYTALE_SERVER_IDENTITY_TOKEN", i);
+    }
     cmd.args(&args)
         .current_dir(&dir)
         // the orchestrator handles updates (versions + 1-click update); the server's own updater would
@@ -166,6 +184,10 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
         });
     }
     state.system_log(id, format!("Starting {} ({}) on UDP port {}", inst.name, inst.version, inst.port));
+    if session.is_some() {
+        let name = crate::account::load(state).map(|a| a.profile_name()).unwrap_or_default();
+        state.system_log(id, format!("Signed in with your Hytale account ({name}) - no sign-in prompt needed"));
+    }
     state.system_log(id, format!("> {} {}", java.display(), args.join(" ")));
     let mut child = tokio::process::Command::from(cmd).kill_on_drop(true).spawn().with_context(|| format!("cannot start {}", java.display()))?;
 
@@ -392,7 +414,12 @@ pub fn classify(p: &LinePatterns, line: &str) -> Vec<LineEvent> {
     }
     if lower.contains("authentication successful") {
         ev.push(LineEvent::AuthOk);
-    } else if lower.contains("/auth login") || lower.contains("not authenticated") || lower.contains("no server tokens") || lower.contains("authentication required") {
+    } else if lower.contains("/auth login")
+        || lower.contains("not authenticated")
+        || lower.contains("starting unauthenticated")
+        || lower.contains("no server tokens")
+        || lower.contains("authentication required")
+    {
         ev.push(LineEvent::AuthNeeded);
     }
     if let Some(n) = first_group(&p.leave, line) {

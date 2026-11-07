@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use super::instance::Check;
-use super::{Banner, Icon, Linkified, PageHeader, run_job, use_state, use_toast};
+use super::{Banner, ConfirmButton, Icon, Linkified, PageHeader, PanelHead, TaskCard, run_job, use_state, use_toast};
 use crate::state::{Mode, VERSION, fmt_time};
 
 #[component]
@@ -22,7 +22,8 @@ pub fn SettingsPage(tick: u64) -> Element {
 
     rsx! {
         div { class: "page narrow",
-            PageHeader { title: "Settings", subtitle: "" }
+            PageHeader { title: "Settings", subtitle: "Java, your Hytale account, web access and updates." }
+            AccountPanel { tick }
             div { class: "panel glass",
                 h3 { "Java" }
                 p { class: "muted small", "Hytale servers need Java 25. HyOrchestrator uses, in order: the path below, its own Temurin copy, JAVA_HOME, then java on the PATH." }
@@ -111,6 +112,59 @@ pub fn SettingsPage(tick: u64) -> Element {
                     toast.result(s4.save_settings(), "Settings saved");
                     s4.notify();
                 }, "Save settings" }
+            }
+        }
+    }
+}
+
+/// The Hytale account every server signs in with: sign in once, then servers start without prompts.
+#[component]
+pub fn AccountPanel(tick: u64) -> Element {
+    let state = use_state();
+    let toast = use_toast();
+    let _ = tick;
+    let account = crate::account::load(&state);
+    let task = state.tasks.read().iter().find(|t| t.title.starts_with("Sign in to Hytale (all servers)") && t.status == crate::state::TaskStatus::Running).cloned();
+    let (s1, s2, s3) = (state.clone(), state.clone(), state.clone());
+    let name = account.as_ref().map(|a| a.profile_name()).unwrap_or_default();
+    let initial = name.chars().next().unwrap_or('?').to_string();
+    let (signed, refreshed) = account.as_ref().map(|a| (fmt_time(a.signed_in_at), fmt_time(a.refreshed_at))).unwrap_or_default();
+    rsx! {
+        div { class: "panel glass account",
+            PanelHead { title: "Hytale account", icon: Some("key"),
+                desc: "Sign in once and every server starts already signed in - no code each time you start one. Uses Hytale's official server token flow; the login refreshes itself and only needs renewing after 30 days without HyOrchestrator running." }
+            if let Some(t) = task {
+                TaskCard { task: t, expanded: false }
+            } else if let Some(a) = account {
+                div { class: "account-state",
+                    div { class: "account-avatar", "{initial}" }
+                    div { class: "grow",
+                        b { "{name}" }
+                        div { class: "muted small", "Signed in {signed} · token refreshed {refreshed}" }
+                    }
+                    span { class: "pill running", "Servers sign in automatically" }
+                }
+                if a.profiles.len() > 1 {
+                    label { class: "field", span { "Servers run as" }
+                        select { class: "input", onchange: move |e| toast.result(crate::account::select_profile(&s1, &e.value()), "Profile saved"),
+                            for p in a.profiles.clone() { option { key: "{p.uuid}", value: "{p.uuid}", selected: p.uuid == a.profile, "{p.username}" } }
+                        }
+                    }
+                }
+                div { class: "row end",
+                    ConfirmButton { label: "Sign out", confirm: "Servers will ask to sign in again. Sign out?", class: "ghost", disabled: false,
+                        onconfirm: move |_| toast.result(crate::account::sign_out(&s2), "Signed out")
+                    }
+                }
+            } else {
+                div { class: "account-state",
+                    div { class: "account-avatar off", Icon { name: "key" } }
+                    div { class: "grow",
+                        b { "Not signed in" }
+                        div { class: "muted small", "Each server asks for its own sign-in code until you sign in here." }
+                    }
+                    button { class: "btn primary", onclick: move |_| toast.result(crate::actions::sign_in_account(&s3), ""), Icon { name: "key" } "Sign in to Hytale" }
+                }
             }
         }
     }
