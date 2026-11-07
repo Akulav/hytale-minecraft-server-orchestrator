@@ -267,7 +267,12 @@ pub struct Runtime {
     pub history: VecDeque<Sample>,
     /// device-login link printed by `/auth login device`
     pub auth_url: Option<String>,
+    pub auth_code: Option<String>,
     pub needs_auth: bool,
+    /// a device sign-in was started in this run (automatically or by the button)
+    pub auth_requested: bool,
+    /// the sign-in page was opened in the browser (desktop mode)
+    pub auth_opened: bool,
     pub last_exit: Option<i32>,
     pub crash_times: Vec<i64>,
 }
@@ -289,6 +294,13 @@ pub enum TaskStatus {
     Failed,
 }
 
+/// A Hytale device sign-in waiting for the user: open `url` (it already carries the code) and approve.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct LoginPrompt {
+    pub url: String,
+    pub code: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Task {
     pub id: String,
@@ -302,6 +314,8 @@ pub struct Task {
     pub ended_at: Option<i64>,
     /// instance the task belongs to (if any)
     pub instance: Option<String>,
+    /// the task waits for a Hytale sign-in (the downloader's device code)
+    pub login: Option<LoginPrompt>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -461,6 +475,7 @@ impl AppState {
                 started_at: now_ms(),
                 ended_at: None,
                 instance: instance.map(str::to_string),
+                login: None,
             },
         );
         tasks.truncate(40);
@@ -492,9 +507,18 @@ impl AppState {
         self.notify();
     }
 
+    /// Shows (Some) or clears (None) a sign-in prompt on a task.
+    pub fn task_login(&self, id: &str, login: Option<LoginPrompt>) {
+        if let Some(t) = self.tasks.write().iter_mut().find(|t| t.id == id) {
+            t.login = login;
+        }
+        self.notify();
+    }
+
     pub fn task_finish(&self, id: &str, result: &Result<String>) {
         if let Some(t) = self.tasks.write().iter_mut().find(|t| t.id == id) {
             t.ended_at = Some(now_ms());
+            t.login = None;
             match result {
                 Ok(msg) => {
                     t.status = TaskStatus::Done;

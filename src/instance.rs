@@ -13,7 +13,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::state::{DEFAULT_GAME_PORT, InstanceConfig, Shared, now_ms};
 use crate::versions;
@@ -322,9 +322,15 @@ pub fn list_mods(state: &Shared, id: &str) -> Vec<ModInfo> {
     out
 }
 
+/// The last component of a path written with `/` or `\` - on every OS (a browser on Windows may send
+/// `C:\x\mod.jar` to a Linux server, where `\` is not a separator for `Path`).
+pub fn base_name(path: &str) -> &str {
+    path.trim().rsplit(['/', '\\']).next().unwrap_or_default()
+}
+
 /// A safe file name for an uploaded mod (no folders, only .jar / .zip).
 pub fn sanitize_mod_name(name: &str) -> Result<String> {
-    let base = Path::new(name.trim()).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let base = base_name(name);
     let clean: String = base.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()).collect();
     let lower = clean.to_lowercase();
     if clean.is_empty() || clean.starts_with('.') {
@@ -352,8 +358,11 @@ pub fn add_mod(state: &Shared, id: &str, name: &str, bytes: &[u8]) -> Result<Str
 
 pub fn toggle_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
     let dir = mods_dir(state, id);
-    let file = Path::new(file).file_name().ok_or_else(|| anyhow!("invalid mod"))?.to_string_lossy().to_string();
-    let from = dir.join(&file);
+    let file = base_name(file);
+    if file.is_empty() || file.starts_with('.') {
+        bail!("invalid mod");
+    }
+    let from = dir.join(file);
     let to = match file.strip_suffix(".disabled") {
         Some(base) => dir.join(base),
         None => dir.join(format!("{file}.disabled")),
@@ -364,7 +373,10 @@ pub fn toggle_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
 }
 
 pub fn delete_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
-    let file = Path::new(file).file_name().ok_or_else(|| anyhow!("invalid mod"))?;
+    let file = base_name(file);
+    if file.is_empty() || file.starts_with('.') {
+        bail!("invalid mod");
+    }
     std::fs::remove_file(mods_dir(state, id).join(file))?;
     state.notify();
     Ok(())
@@ -389,6 +401,9 @@ mod tests {
         assert_eq!(sanitize_mod_name("cool-mod-1.2.jar").unwrap(), "cool-mod-1.2.jar");
         assert_eq!(sanitize_mod_name("C:\\x\\..\\pack.ZIP").unwrap(), "pack.ZIP");
         assert_eq!(sanitize_mod_name("../../evil.jar").unwrap(), "evil.jar");
+        assert_eq!(sanitize_mod_name("..\\..\\evil.jar").unwrap(), "evil.jar");
+        assert_eq!(base_name("a/b\\c.zip"), "c.zip");
+        assert_eq!(base_name(".."), "..");
         assert!(sanitize_mod_name("readme.txt").is_err());
         assert!(sanitize_mod_name(".jar").is_err());
     }

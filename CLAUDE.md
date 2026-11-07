@@ -72,6 +72,13 @@ scripts/        bump-version.ps1, make-icons.ps1
 - Downloader CLI (Windows/Linux only): `https://downloader.hytale.com/hytale-downloader.zip`, flags `-patchline`,
   `-print-version`, `-download-path`, `-skip-update-check`; credentials kept next to it (`data/tools/hytale-downloader`).
 - First server start needs `/auth login device` (link `accounts.hytale.com/device?user_code=…`).
+- Real downloader output (checked 2026-11): `Please visit the following URL to authenticate:` /
+  `https://oauth.accounts.hytale.com/oauth2/device/verify?user_code=XXXX` / `Authorization code: XXXX`, then it
+  continues by itself; credentials in `.hytale-downloader-credentials.json` next to it. Archive contains
+  `hytale-downloader-linux-amd64`, `hytale-downloader-windows-amd64.exe`, `QUICKSTART.md`.
+- Sign-in prompts are parsed by `login.rs` (downloader + server): `LoginCard` in the UI, auto-open in desktop mode,
+  servers auto-start `/auth login device` once per run when they report being unauthenticated and send
+  `/auth persistence Encrypted` after success. Output is read with `process::read_segments` (splits on `\r` too).
 - Working dir holds `universe/worlds/<name>/config.json` (`"Seed"`), `mods/`, `config.json`, `permissions.json`,
   `whitelist.json`, `bans.json`. Config files are rewritten by a running server: edit them only while stopped.
 - Console commands take a leading `/` (`/op add <name>`, `/op remove`, `/stop`). We set `HYTALE_DISABLE_UPDATES=1`.

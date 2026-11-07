@@ -12,7 +12,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::state::{Shared, now_ms, read_json, write_json};
 
@@ -189,6 +188,29 @@ async fn ensure_downloader(state: &Shared, task: &str) -> Result<PathBuf> {
     }
     let dir = downloader_dir(state);
     if let Some(exe) = pick_downloader(&crate::archive::walk_files(&dir)) {
+        // Hypixel updates the tool now and then: refresh a copy older than a week (best effort - the
+        // saved login next to it is kept, the archive only overwrites the programs)
+        let old = std::fs::metadata(&exe).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age.as_secs() > 7 * 86400);
+        if !old {
+            return Ok(exe);
+        }
+        state.task_log(task, "Refreshing the Hytale Downloader CLI (a week old)");
+        let zip = state.paths.tmp.join("hytale-downloader.zip");
+        if crate::download::to_file(state, task, DOWNLOADER_URL, &zip).await.is_ok() {
+            let (z2, d2) = (zip.clone(), dir.clone());
+            let _ = tokio::task::spawn_blocking(move || crate::archive::extract_zip(&z2, &d2, |_| {})).await;
+            let _ = std::fs::remove_file(&zip);
+        }
+        let exe = pick_downloader(&crate::archive::walk_files(&dir)).unwrap_or(exe);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755));
+        }
+        // a fresh extract has a new modification time only if the archive did; touch it either way
+        if let Ok(f) = std::fs::File::options().append(true).open(&exe) {
+            let _ = f.set_modified(std::time::SystemTime::now());
+        }
         return Ok(exe);
     }
     state.task_log(task, format!("Fetching the Hytale Downloader CLI from {DOWNLOADER_URL}"));
@@ -212,36 +234,100 @@ async fn run_downloader(state: &Shared, task: &str, exe: &Path, args: &[String])
     cmd.args(args).current_dir(downloader_dir(state)).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     crate::process::no_window(&mut cmd);
     let mut child = tokio::process::Command::from(cmd).kill_on_drop(true).spawn().with_context(|| format!("cannot start {}", exe.display()))?;
+    #[cfg(windows)]
+    if let Some(pid) = child.id() {
+        crate::process::job::adopt(pid);
+    }
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
-    let collected = std::sync::Arc::new(parking_lot::Mutex::new(String::new()));
+    let shared = std::sync::Arc::new(parking_lot::Mutex::new(Pump::default()));
     let pump = |r: Box<dyn tokio::io::AsyncRead + Unpin + Send>| {
-        let (st, t, col) = (state.clone(), task.to_string(), collected.clone());
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(r).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let line = crate::process::strip_ansi(&line);
-                if line.trim().is_empty() {
-                    continue;
-                }
-                if line.contains("accounts.hytale.com") || line.to_lowercase().contains("code") {
-                    st.task_update(&t, Some("Waiting for you to log in to Hytale (see the link below)"), None);
-                }
-                col.lock().push_str(&line);
-                col.lock().push('\n');
-                st.task_log(&t, line);
-            }
-        })
+        let (st, t, sh) = (state.clone(), task.to_string(), shared.clone());
+        tokio::spawn(async move { crate::process::read_segments(r, |line| on_downloader_line(&st, &t, &sh, &line)).await })
     };
     let a = pump(Box::new(out));
     let b = pump(Box::new(err));
     let status = child.wait().await?;
     let _ = tokio::join!(a, b);
-    let text = collected.lock().clone();
+    state.task_login(task, None);
+    let text = shared.lock().text.clone();
     if !status.success() {
+        if shared.lock().prompt.is_some() {
+            bail!("the Hytale sign-in was not completed in time - start the download again for a new code");
+        }
         bail!("the Hytale downloader failed ({status}); see the log above");
     }
     Ok(text)
+}
+
+/// What the downloader printed so far, and its sign-in prompt (while one is open).
+#[derive(Default)]
+struct Pump {
+    text: String,
+    prompt: Option<crate::state::LoginPrompt>,
+    opened: bool,
+    last_pct: f32,
+}
+
+fn on_downloader_line(st: &Shared, task: &str, sh: &parking_lot::Mutex<Pump>, raw: &str) {
+    let line = crate::process::strip_ansi(raw);
+    let line = line.trim();
+    if line.is_empty() {
+        return;
+    }
+    let bits = crate::login::parse(line);
+    let mut p = sh.lock();
+    p.text.push_str(line);
+    p.text.push('\n');
+    let mut changed = false;
+    for b in &bits {
+        if let crate::login::Bit::Progress(pct) = b {
+            if p.prompt.take().is_some() {
+                st.task_login(task, None);
+                st.task_log(task, "Signed in to Hytale ✓ (the login is saved for next time)");
+            }
+            st.task_update(task, Some(&format!("Downloading… {pct:.0}%")), Some(pct / 100.0));
+            // log every 10 % instead of every redraw
+            if *pct >= p.last_pct + 10.0 || *pct >= 100.0 && p.last_pct < 100.0 {
+                p.last_pct = *pct;
+                st.task_log(task, line.to_string());
+            }
+            return;
+        }
+        let prompt = p.prompt.get_or_insert_with(Default::default);
+        changed |= crate::login::merge(prompt, b);
+    }
+    if changed {
+        let prompt = p.prompt.clone().unwrap_or_default();
+        if !p.opened && prompt.url.contains("user_code=") {
+            p.opened = true;
+            crate::login::auto_open(st, &prompt.url);
+        }
+        st.task_login(task, Some(prompt));
+        st.task_update(task, Some("Sign in to Hytale to continue - approve the code in your browser"), None);
+    } else if bits.is_empty() && p.prompt.is_some() && !crate::login::is_prompt_text(line) {
+        // the tool moved on: the sign-in went through
+        p.prompt = None;
+        st.task_login(task, None);
+        st.task_log(task, "Signed in to Hytale ✓ (the login is saved for next time)");
+        st.task_update(task, Some("Signed in - working…"), None);
+    }
+    st.task_log(task, line.to_string());
+}
+
+/// The downloader keeps its Hytale login next to itself after the first sign-in.
+pub fn downloader_signed_in(state: &Shared) -> bool {
+    downloader_dir(state).join(".hytale-downloader-credentials.json").is_file()
+}
+
+/// Forgets the downloader's Hytale login (the next download asks again).
+pub fn downloader_sign_out(state: &Shared) -> Result<()> {
+    let f = downloader_dir(state).join(".hytale-downloader-credentials.json");
+    if f.exists() {
+        std::fs::remove_file(f)?;
+    }
+    state.notify();
+    Ok(())
 }
 
 /// Downloads the latest server of `patchline` into the cache (skipped when already there).
@@ -393,6 +479,13 @@ mod tests {
         } else if cfg!(target_os = "linux") {
             assert_eq!(picked, PathBuf::from("hytale-downloader-linux-amd64"));
         }
+    }
+
+    #[test]
+    fn picks_the_real_downloader_archive_names() {
+        // the names inside downloader.hytale.com/hytale-downloader.zip (checked 2026-11)
+        let files: Vec<PathBuf> = ["QUICKSTART.md", "hytale-downloader-linux-amd64", "hytale-downloader-windows-amd64.exe"].iter().map(PathBuf::from).collect();
+        assert!(pick_downloader(&files).is_some());
     }
 
     #[test]

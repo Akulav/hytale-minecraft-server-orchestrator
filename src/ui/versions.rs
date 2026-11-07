@@ -17,8 +17,9 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
     let launcher = versions::launcher_installs();
     let instances = state.instances.read().clone();
     let tasks: Vec<_> = state.tasks.read().iter().filter(|t| t.instance.is_none() && (t.status == TaskStatus::Running || crate::state::now_ms() - t.ended_at.unwrap_or(0) < 120_000)).cloned().collect();
-    let (s1, s2, s3) = (state.clone(), state.clone(), state.clone());
+    let (s1, s2, s3, s4) = (state.clone(), state.clone(), state.clone(), state.clone());
     let mac = cfg!(target_os = "macos");
+    let signed_in = versions::downloader_signed_in(&state);
 
     rsx! {
         div { class: "page",
@@ -27,7 +28,21 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
             div { class: "grid3",
                 div { class: "panel glass",
                     h3 { Icon { name: "download" } " Official downloader" }
-                    p { class: "muted small", "Uses Hypixel's Hytale Downloader CLI. The first time it shows a link and a code: open it and log in with the Hytale account that owns the game." }
+                    p { class: "muted small", "HyOrchestrator fetches Hypixel's Hytale Downloader CLI by itself. The first time, a sign-in card appears with a code: open the page, approve with the Hytale account that owns the game, and the download starts. No token to paste." }
+                    if !mac {
+                        div { class: "account-row",
+                            if signed_in {
+                                span { class: "pill running sm", "Signed in" }
+                                span { class: "muted small grow", "Hytale login saved" }
+                                ConfirmButton { label: "Sign out", confirm: "Forget the saved login?", class: "sm ghost", disabled: false,
+                                    onconfirm: move |_| toast.result(versions::downloader_sign_out(&s4), "Signed out - the next download asks again")
+                                }
+                            } else {
+                                span { class: "pill sm", "Not signed in" }
+                                span { class: "muted small grow", "you'll be asked on the first download" }
+                            }
+                        }
+                    }
                     if mac {
                         p { class: "warn-text small", "Hytale publishes the downloader for Windows and Linux only. Use the launcher import on a Mac." }
                     }

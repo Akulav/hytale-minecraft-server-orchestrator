@@ -82,11 +82,14 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
 1. **Download** the file for your system from the [latest release](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
    and install it (see [below](#-installing-updating-and-uninstalling)).
 2. **Start HyOrchestrator.** No Java 25? Click **Install Java 25 (Temurin)** on the dashboard.
-3. **Server versions → Latest release.** The first time, the Hytale downloader shows a link and a code: open it
-   and log in with the account that owns Hytale. (Or **Import** the files of your installed Hytale launcher.)
+3. **Server versions → Latest release.** HyOrchestrator fetches Hypixel's official downloader by itself. The first
+   time a **Sign in to Hytale** card appears with a code: click **Open sign-in page** (the desktop app opens it for
+   you), approve with the account that owns Hytale, and the download continues by itself. No token to paste; the
+   login is saved. (Or **Import** the files of your installed Hytale launcher.)
 4. **New instance** → name, version, port, seed → **Create** → **Start**.
-5. First start only: the server asks to log in to Hytale. Click **Log in (device code)** on the instance page and
-   approve the code. Players then join on `your-ip:5520` (UDP).
+5. First start only: the server must be signed in too. HyOrchestrator starts the sign-in by itself and shows the
+   same card on the instance page; approve it once and the login is saved for restarts. Players then join on
+   `your-ip:5520` (UDP).
 
 > [!TIP]
 > On a Linux server without a display, just run `./hyorchestrator-linux-x64-headless`: it prints a link like
@@ -278,7 +281,8 @@ src/                         the Rust program (see CLAUDE.md for a file-by-file 
 |---|---|
 | "Java 25 or newer is required" | Dashboard or Settings → **Install Java 25 (Temurin)**, or set the path to your own Java 25. |
 | Players can't connect | Forward / allow **UDP** (not TCP) on the instance's port. On the server, check the **Log in** banner: an unauthenticated server rejects players. |
-| The server forgets its login after a restart | Instance → Overview → **Remember login** (sends `/auth persistence Encrypted`). |
+| The server forgets its login after a restart | HyOrchestrator sends `/auth persistence Encrypted` after each sign-in; use **Sign in again** on the instance page, or type it in the console. |
+| The sign-in code expired | Start the download again (or **Sign in again** for a server): a new code appears. Server versions → **Sign out** forgets the downloader's saved login. |
 | The player list stays empty | The console wording may differ in your Hytale version: set your own join / leave patterns in Settings. |
 | Downloader on a Mac | Hypixel ships it for Windows and Linux only: use **Import from your Hytale launcher**. |
 | Linux: "cannot create the web view" | Install WebKitGTK 4.1, or use the `-headless` build / `--headless`. |

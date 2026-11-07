@@ -50,7 +50,10 @@ pub fn list(state: &Shared, id: &str) -> Vec<BackupInfo> {
 }
 
 fn backup_path(state: &Shared, id: &str, file: &str) -> Result<PathBuf> {
-    let name = std::path::Path::new(file).file_name().ok_or_else(|| anyhow!("invalid backup"))?;
+    let name = crate::instance::base_name(file);
+    if !name.ends_with(".zip") || name.starts_with('.') {
+        bail!("invalid backup");
+    }
     let p = state.paths.backup_dir(id).join(name);
     if !p.is_file() {
         bail!("backup {file} not found");

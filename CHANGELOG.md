@@ -5,6 +5,23 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-07
+### Added
+- Effortless Hytale sign-in: when the official downloader or a server needs your Hytale account, a
+  "Sign in to Hytale" card shows the code with **Open sign-in page** (the link already carries the code, nothing
+  to type) and **Copy code**; the desktop app opens the page in your browser by itself. The downloader then
+  continues on its own.
+- Servers that start unauthenticated begin the device sign-in automatically and save the login after it
+  succeeds (`/auth persistence Encrypted`), so restarts stay signed in. "Sign in again" starts a new one.
+- Server versions shows whether the downloader is signed in, with **Sign out**.
+- The downloader's progress fills the task's progress bar; the downloader refreshes itself weekly.
+
+### Fixed
+- Linux / macOS: mod and backup file names written with `\` (from a Windows browser) were not cut down to the
+  file name - this also made the CI tests fail on Linux and macOS.
+- The Hytale downloader is ended with HyOrchestrator if it is closed while the downloader waits for a sign-in.
+- CI: actions/checkout v5 (Node 24).
+
 ## [0.1.0] - 2026-11-07
 ### Added
 - First release of HyOrchestrator, a pure-Rust Hytale server orchestrator. Made by Akulav.

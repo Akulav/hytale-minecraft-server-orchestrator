@@ -71,6 +71,29 @@
     }
   }, true);
 
+  // copy buttons (data-copy="text"): sign-in codes. navigator.clipboard needs a secure context
+  // (127.0.0.1 is one; a LAN address over http is not), so fall back to a hidden textarea.
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest ? e.target.closest("[data-copy]") : null;
+    if (!b) return;
+    var text = b.getAttribute("data-copy");
+    function done() {
+      var old = b.textContent;
+      b.textContent = "Copied ✓";
+      b.classList.add("copied");
+      setTimeout(function () { b.textContent = old; b.classList.remove("copied"); }, 1500);
+    }
+    function fallback() {
+      var t = document.createElement("textarea");
+      t.value = text; t.style.position = "fixed"; t.style.opacity = "0";
+      document.body.appendChild(t); t.select();
+      try { document.execCommand("copy"); done(); } catch (_) {}
+      document.body.removeChild(t);
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  });
+
   // connection hint: the LiveView client reconnects by itself
   var Native = window.WebSocket;
   if (Native) {

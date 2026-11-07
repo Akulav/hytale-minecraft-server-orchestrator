@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use super::{Banner, Empty, Icon, Page, PageHeader, Spark, Stat, run_job, use_state, use_toast};
+use super::{Banner, Empty, Icon, Page, PageHeader, Spark, Stat, TaskCard, run_job, use_state, use_toast};
 use crate::state::{Status, human_duration, now_ms};
 
 #[component]
@@ -22,11 +22,15 @@ pub fn Dashboard(nav: Signal<Page>, tick: u64) -> Element {
     let ram_hist: Vec<f32> = host.history.iter().map(|h| h.1).collect();
     let ram_pct = if host.ram_total_mb > 0 { host.ram_used_mb as f32 * 100.0 / host.ram_total_mb as f32 } else { 0.0 };
     let st_java = state.clone();
+    let waiting_login = state.tasks.read().iter().find(|t| t.login.is_some()).cloned();
 
     rsx! {
         div { class: "page",
             PageHeader { title: "Dashboard", subtitle: "Every Hytale server on this machine at a glance.",
                 button { class: "btn primary", onclick: move |_| nav.set(Page::Create), Icon { name: "plus" } "New instance" }
+            }
+            if let Some(t) = waiting_login {
+                TaskCard { task: t, expanded: false }
             }
             if !java.error.is_empty() {
                 Banner { kind: "warn", icon: "alert",

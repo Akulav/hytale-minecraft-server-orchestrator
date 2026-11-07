@@ -3,7 +3,7 @@
 
 use dioxus::prelude::*;
 
-use super::{Banner, ConfirmButton, Empty, Icon, Linkified, Page, Spark, Stat, TaskCard, run_job, use_state, use_toast};
+use super::{Banner, ConfirmButton, Empty, Icon, Linkified, LoginCard, Page, Spark, Stat, TaskCard, run_job, use_state, use_toast};
 use crate::state::{LogKind, Mode, Status, human_bytes, human_duration, now_ms};
 use crate::{actions, backup, instance, process};
 
@@ -111,7 +111,7 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
     let toast = use_toast();
     let _ = tick;
     let Some(inst) = state.instance(&id) else { return rsx! {} };
-    let (status, cpu, ram, players, uptime, hist, needs_auth, auth_url, tail, last_exit) = {
+    let (status, cpu, ram, players, uptime, hist, needs_auth, auth_url, auth_code, tail, last_exit) = {
         let rt = state.runtimes.read();
         match rt.get(&id) {
             Some(r) => (
@@ -123,10 +123,11 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                 r.history.clone(),
                 r.needs_auth,
                 r.auth_url.clone(),
+                r.auth_code.clone(),
                 r.log.iter().rev().take(10).rev().cloned().collect::<Vec<_>>(),
                 r.last_exit,
             ),
-            None => (Status::Stopped, 0.0, 0, Vec::new(), None, Default::default(), false, None, Vec::new(), None),
+            None => (Status::Stopped, 0.0, 0, Vec::new(), None, Default::default(), false, None, None, Vec::new(), None),
         }
     };
     let cpu_hist: Vec<f32> = hist.iter().map(|s| s.cpu).collect();
@@ -140,19 +141,23 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
 
     rsx! {
         if needs_auth && status.is_active() {
-            Banner { kind: "warn", icon: "key",
-                b { "This server needs to log in to Hytale before players can join. " }
-                if let Some(url) = auth_url.clone() {
-                    span { "Open " a { href: "{url}", target: "_blank", rel: "noopener", "{url}" } " and approve the code shown in the console." }
-                } else {
-                    span { class: "muted", "Start a device login and approve it in your browser." }
-                }
-                div { class: "banner-actions",
-                    button { class: "btn sm primary", onclick: move |_| toast.result(process::send_command(&s1, &i1, "/auth login device"), "Login started - the link appears here"), "Log in (device code)" }
-                    button { class: "btn sm ghost", title: "Stores the login encrypted so it survives restarts",
-                        onclick: move |_| toast.result(process::send_command(&s2, &i2, "/auth persistence Encrypted"), "Sent /auth persistence Encrypted"),
-                        "Remember login"
+            if let Some(url) = auth_url.clone() {
+                LoginCard { title: "Sign this server in to Hytale", url, code: auth_code.clone().unwrap_or_default(),
+                    note: "Hytale servers must be signed in before players can join. Open the page, check the code and approve with your Hytale account. The login is then saved for restarts." }
+            } else {
+                Banner { kind: "warn", icon: "key",
+                    b { "This server needs to sign in to Hytale before players can join. " }
+                    span { class: "muted", "Starting a device sign-in… if no code appears in a few seconds, press the button." }
+                    div { class: "banner-actions",
+                        button { class: "btn sm primary", onclick: move |_| toast.result(process::start_login(&s1, &i1), "Sign-in started - the code appears here"), "Sign in (device code)" }
                     }
+                }
+            }
+        } else if status.is_active() && !inst.offline_auth {
+            div { class: "row end",
+                button { class: "btn sm ghost", title: "Start a new Hytale device sign-in for this server (e.g. to use another account)",
+                    onclick: move |_| toast.result(process::start_login(&s2, &i2), "Sign-in started - the code appears here"),
+                    Icon { name: "key" } "Sign in again"
                 }
             }
         }

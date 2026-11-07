@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::state::{InstanceConfig, LogKind, Shared, Status, now_ms};
@@ -25,6 +25,33 @@ pub fn no_window(cmd: &mut std::process::Command) {
     }
     #[cfg(not(windows))]
     let _ = cmd;
+}
+
+/// Reads `r` and calls `f` for every line, splitting on `\n` and `\r` (progress bars redraw with `\r`).
+/// Invalid UTF-8 is replaced, never fatal.
+pub async fn read_segments<R: tokio::io::AsyncRead + Unpin>(mut r: R, mut f: impl FnMut(String)) {
+    use tokio::io::AsyncReadExt;
+    let mut buf = vec![0u8; 16 * 1024];
+    let mut cur: Vec<u8> = Vec::new();
+    loop {
+        let n = match r.read(&mut buf).await {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        for &b in &buf[..n] {
+            if b == b'\n' || b == b'\r' {
+                if !cur.is_empty() {
+                    f(String::from_utf8_lossy(&cur).into_owned());
+                    cur.clear();
+                }
+            } else if cur.len() < 64 * 1024 {
+                cur.push(b);
+            }
+        }
+    }
+    if !cur.is_empty() {
+        f(String::from_utf8_lossy(&cur).into_owned());
+    }
 }
 
 pub fn strip_ansi(s: &str) -> String {
@@ -159,6 +186,10 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
         r.players.clear();
         r.history.clear();
         r.auth_url = None;
+        r.auth_code = None;
+        r.auth_requested = false;
+        r.auth_opened = false;
+        r.needs_auth = false;
         r.last_exit = None;
     });
     state.notify();
@@ -179,16 +210,7 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
         .filter_map(|(r, kind)| r.map(|r| (r, kind)))
         .map(|(r, kind)| {
             let (st, id) = (state.clone(), id.to_string());
-            tokio::spawn(async move {
-                let mut lines = BufReader::new(r).lines();
-                loop {
-                    match lines.next_line().await {
-                        Ok(Some(line)) => on_line(&st, &id, kind, &strip_ansi(&line)),
-                        Ok(None) => break,
-                        Err(_) => continue, // non-UTF-8 output: skip the line
-                    }
-                }
-            })
+            tokio::spawn(async move { read_segments(r, |line| on_line(&st, &id, kind, &strip_ansi(&line))).await })
         })
         .collect();
 
@@ -266,7 +288,7 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
 /// orphaned server keeps holding its port (Linux does the same with the parent-death signal). A normal
 /// quit stops them cleanly with `/stop` first.
 #[cfg(windows)]
-mod job {
+pub mod job {
     use std::sync::OnceLock;
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::JobObjects::{
@@ -349,6 +371,7 @@ pub enum LineEvent {
     Joined(String),
     Left(String),
     AuthUrl(String),
+    AuthCode(String),
     AuthNeeded,
     AuthOk,
     Ready,
@@ -356,14 +379,16 @@ pub enum LineEvent {
 
 /// What a console line tells us.
 pub fn classify(p: &LinePatterns, line: &str) -> Vec<LineEvent> {
-    static AUTH_URL: OnceLock<regex::Regex> = OnceLock::new();
     static READY: OnceLock<regex::Regex> = OnceLock::new();
-    let auth_url = AUTH_URL.get_or_init(|| regex::Regex::new(r"https://accounts\.hytale\.com/device\S*").unwrap());
     let ready = READY.get_or_init(|| regex::Regex::new(r"(?i)(server (?:has )?(?:started|booted)|hytale server booted|server is (?:now )?(?:ready|running)|listening on|done \([0-9.]+s\))").unwrap());
     let mut ev = Vec::new();
     let lower = line.to_lowercase();
-    if let Some(m) = auth_url.find(line) {
-        ev.push(LineEvent::AuthUrl(m.as_str().trim_end_matches(['.', ',', ')']).to_string()));
+    for bit in crate::login::parse(line) {
+        match bit {
+            crate::login::Bit::Url(u) => ev.push(LineEvent::AuthUrl(u)),
+            crate::login::Bit::Code(c) => ev.push(LineEvent::AuthCode(c)),
+            crate::login::Bit::Progress(_) => {}
+        }
     }
     if lower.contains("authentication successful") {
         ev.push(LineEvent::AuthOk);
@@ -395,9 +420,19 @@ fn patterns(state: &Shared) -> std::sync::Arc<LinePatterns> {
     c.2.clone()
 }
 
+/// What `on_line` decided to do once the runtime lock is released.
+#[derive(Default)]
+struct Follow {
+    start_login: bool,
+    open_url: Option<String>,
+    persist: bool,
+}
+
 fn on_line(state: &Shared, id: &str, kind: LogKind, line: &str) {
     let events = classify(&patterns(state), line);
-    state.with_runtime(id, |r| {
+    let offline = state.instance(id).is_some_and(|i| i.offline_auth);
+    let follow = state.with_runtime(id, |r| {
+        let mut f = Follow::default();
         r.push_log(kind, line);
         for e in events {
             match e {
@@ -408,13 +443,30 @@ fn on_line(state: &Shared, id: &str, kind: LogKind, line: &str) {
                     r.players.remove(&n);
                 }
                 LineEvent::AuthUrl(u) => {
-                    r.auth_url = Some(u);
+                    // the link that carries the code wins over the plain one
+                    if r.auth_url.as_deref().is_none_or(|old| !old.contains("user_code=") || u.contains("user_code=")) {
+                        if u.contains("user_code=") && !r.auth_opened {
+                            r.auth_opened = true;
+                            f.open_url = Some(u.clone());
+                        }
+                        r.auth_url = Some(u);
+                    }
                     r.needs_auth = true;
                 }
-                LineEvent::AuthNeeded => r.needs_auth = true,
+                LineEvent::AuthCode(c) => r.auth_code = Some(c),
+                LineEvent::AuthNeeded => {
+                    r.needs_auth = true;
+                    // start the device sign-in by ourselves, once per run
+                    if !offline && !r.auth_requested {
+                        r.auth_requested = true;
+                        f.start_login = true;
+                    }
+                }
                 LineEvent::AuthOk => {
                     r.needs_auth = false;
                     r.auth_url = None;
+                    r.auth_code = None;
+                    f.persist = true;
                 }
                 LineEvent::Ready => {
                     if r.status == Status::Starting {
@@ -423,8 +475,30 @@ fn on_line(state: &Shared, id: &str, kind: LogKind, line: &str) {
                 }
             }
         }
+        f
     });
+    if let Some(u) = follow.open_url {
+        crate::login::auto_open(state, &u);
+    }
+    if follow.start_login {
+        let _ = send_command(state, id, "/auth login device");
+    }
+    if follow.persist {
+        // keep the login across restarts (stored encrypted in auth.enc / auth.key in the server folder)
+        let _ = send_command(state, id, "/auth persistence Encrypted");
+    }
     state.notify();
+}
+
+/// Starts a device sign-in by hand (the button), even if one was already tried in this run.
+pub fn start_login(state: &Shared, id: &str) -> Result<()> {
+    state.with_runtime(id, |r| {
+        r.auth_requested = true;
+        r.auth_opened = false;
+        r.auth_url = None;
+        r.auth_code = None;
+    });
+    send_command(state, id, "/auth login device")
 }
 
 /// Sends a console command (with a leading `/`, as in the Hytale console).
@@ -533,7 +607,9 @@ mod tests {
         assert_eq!(classify(&p, "[Server] Alex joined the game"), vec![LineEvent::Joined("Alex".into())]);
         assert_eq!(classify(&p, "Player Alex disconnected"), vec![LineEvent::Left("Alex".into())]);
         let ev = classify(&p, "Or visit: https://accounts.hytale.com/device?user_code=ABCD-1234");
-        assert_eq!(ev, vec![LineEvent::AuthUrl("https://accounts.hytale.com/device?user_code=ABCD-1234".into())]);
+        assert_eq!(ev, vec![LineEvent::AuthCode("ABCD-1234".into()), LineEvent::AuthUrl("https://accounts.hytale.com/device?user_code=ABCD-1234".into())]);
+        assert_eq!(classify(&p, "Enter code: ABCD-1234"), vec![LineEvent::AuthCode("ABCD-1234".into())]);
+        assert!(classify(&p, "Server is not authenticated. Run /auth login device").contains(&LineEvent::AuthNeeded));
         assert_eq!(classify(&p, "> Authentication successful! Mode: OAUTH_DEVICE"), vec![LineEvent::AuthOk]);
         assert!(classify(&p, "Hytale Server Booted! [Multiplayer]").contains(&LineEvent::Ready));
         assert!(classify(&p, "Loading assets…").is_empty());

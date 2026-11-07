@@ -152,6 +152,34 @@ pub fn Linkified(text: String) -> Element {
     }
 }
 
+/// "Sign in to Hytale": the device code, big, with a button that opens the page (the link already
+/// carries the code, so there is nothing to type) and a copy button.
+#[component]
+pub fn LoginCard(title: String, url: String, code: String, note: String) -> Element {
+    let copy = if code.is_empty() { url.clone() } else { code.clone() };
+    rsx! {
+        div { class: "login-card",
+            div { class: "login-icon", Icon { name: "key" } }
+            div { class: "login-body",
+                b { "{title}" }
+                p { class: "muted small", "{note}" }
+                if !code.is_empty() {
+                    div { class: "login-code-row",
+                        span { class: "login-code", "{code}" }
+                        button { class: "btn sm ghost", "data-copy": "{copy}", "Copy code" }
+                    }
+                }
+                div { class: "row",
+                    if !url.is_empty() {
+                        a { class: "btn primary", href: "{url}", target: "_blank", rel: "noopener", Icon { name: "link" } "Open sign-in page" }
+                    }
+                    span { class: "muted small", "Waiting for your approval… this continues by itself." }
+                }
+            }
+        }
+    }
+}
+
 #[component]
 pub fn TaskCard(task: Task, expanded: bool) -> Element {
     let mut open = use_signal(move || expanded || task.status == TaskStatus::Running);
@@ -171,7 +199,11 @@ pub fn TaskCard(task: Task, expanded: bool) -> Element {
                 span { class: "muted small", if open() { "▾" } else { "▸" } }
             }
             div { class: "task-msg", Linkified { text: task.message.clone() } }
-            if task.status == TaskStatus::Running { Progress { value: task.progress } }
+            if let Some(l) = task.login.clone() {
+                LoginCard { title: "Sign in to Hytale", url: l.url, code: l.code,
+                    note: "The official Hytale downloader needs your Hytale account once (the one that owns the game). Open the page, check the code matches and approve. The login is saved for next time." }
+            }
+            if task.status == TaskStatus::Running && task.login.is_none() { Progress { value: task.progress } }
             if open() && !tail.is_empty() {
                 pre { class: "task-log",
                     for (i, l) in tail.into_iter().enumerate() {

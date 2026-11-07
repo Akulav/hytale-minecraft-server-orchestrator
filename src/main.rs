@@ -13,6 +13,7 @@ mod desktop;
 mod download;
 mod instance;
 mod java;
+mod login;
 mod process;
 mod state;
 mod telemetry;
