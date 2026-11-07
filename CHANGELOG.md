@@ -5,6 +5,12 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-07
+### Changed
+- Instance overview: the console preview is gone (the Console tab has it). Next to **Connect** there is now an
+  **At a glance** panel - worlds, active mods, operators and auth mode - each tile opens its tab. A crashed server's
+  banner has an **Open console** button.
+
 ## [0.3.0] - 2026-11-07
 ### Added
 - **Hytale account - sign in once for every server** (Settings → Hytale account, or step 3 of Get started). Uses

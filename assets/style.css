@@ -265,7 +265,6 @@ select.input option { background: #141829; }
   background: rgba(3, 5, 12, 0.72); border: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
   display: flex; flex-direction: column-reverse; white-space: pre-wrap; word-break: break-word;
 }
-.log.mini { height: 230px; flex-direction: column; justify-content: flex-end; }
 .ln { color: #cfd3ea; }
 .ln.err { color: #fca5a5; }
 .ln.sys { color: var(--violet2); }
@@ -440,17 +439,11 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
 .panel-desc { margin: -6px 0 12px; font-size: 12.5px; }
 .grid2, .grid3 { gap: var(--gap); align-items: stretch; }
 .grid2 > .col { min-width: 0; }
-.grid2.equal > .panel { min-height: 330px; }
-.grid2.equal .log.mini { flex: 1; height: auto; min-height: 200px; }
 
 /* overview: connect panel */
 .address { display: flex; flex-direction: column; gap: 6px; }
 .address-row { display: flex; align-items: center; gap: 10px; }
 .address-value { font-size: 20px; font-weight: 700; padding: 8px 14px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border); color: #e0e7ff; flex: 1; text-align: center; }
-.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: auto; padding-top: 16px; }
-.facts > div { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px; border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.2); }
-.facts b { font-size: 18px; }
-.facts span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: center; }
 
 /* versions: three identical source cards */
 .source { align-items: center; text-align: center; gap: 8px; }
@@ -476,8 +469,7 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
 
 @media (max-width: 1240px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+  }
 @media (max-width: 1100px) {
   .tab .tab-label { display: none; }
   .tab .ico { width: 18px; height: 18px; }
@@ -486,7 +478,6 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
   .stats { grid-template-columns: 1fr 1fr; }
   .inst-header { flex-direction: column; align-items: stretch; }
   .action-bar { justify-content: center; }
-  .grid2.equal > .panel { min-height: 0; }
 }
 @media (max-width: 560px) {
   .stats, .form > .row:not(.end) { grid-template-columns: 1fr; }
@@ -525,3 +516,16 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
   .grid3 { grid-template-columns: 1fr; }
   .source > p { min-height: 0; }
 }
+
+/* overview: "At a glance" tiles (each opens its tab) next to Connect */
+.glance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; flex: 1; }
+.glance-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 14px 8px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border); background: rgba(0, 0, 0, 0.2);
+  color: var(--text); font: inherit; cursor: pointer; transition: background .15s, border-color .15s;
+}
+.glance-tile:hover { background: rgba(139, 92, 246, 0.12); border-color: rgba(139, 92, 246, 0.45); }
+.glance-tile .ico { width: 18px; height: 18px; color: var(--violet2); }
+.glance-tile b { font-size: 20px; line-height: 1.2; }
+.glance-tile span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.connect-hint { margin-top: auto; padding-top: 14px; }

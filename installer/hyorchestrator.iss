@@ -15,7 +15,7 @@
 
 #ifndef AppVersion
   ; scripts\bump-version.ps1 keeps this in sync with Cargo.toml
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.3.1"
 #endif
 #ifndef Exe
   #define Exe "..\target\release\hyorchestrator.exe"

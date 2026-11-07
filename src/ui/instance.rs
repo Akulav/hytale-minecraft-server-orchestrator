@@ -121,7 +121,7 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
     let toast = use_toast();
     let _ = tick;
     let Some(inst) = state.instance(&id) else { return rsx! {} };
-    let (status, cpu, ram, players, uptime, hist, needs_auth, auth_url, auth_code, tail, last_exit) = {
+    let (status, cpu, ram, players, uptime, hist, needs_auth, auth_url, auth_code, last_exit) = {
         let rt = state.runtimes.read();
         match rt.get(&id) {
             Some(r) => (
@@ -134,10 +134,9 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                 r.needs_auth,
                 r.auth_url.clone(),
                 r.auth_code.clone(),
-                r.log.iter().rev().take(10).rev().cloned().collect::<Vec<_>>(),
                 r.last_exit,
             ),
-            None => (Status::Stopped, 0.0, 0, Vec::new(), None, Default::default(), false, None, None, Vec::new(), None),
+            None => (Status::Stopped, 0.0, 0, Vec::new(), None, Default::default(), false, None, None, None),
         }
     };
     let cpu_hist: Vec<f32> = hist.iter().map(|s| s.cpu).collect();
@@ -187,6 +186,9 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
             Banner { kind: "error", icon: "alert",
                 b { "The server crashed" }
                 span { class: "muted", if let Some(c) = last_exit { " (exit code {c})" } ". The console shows the last lines it printed." }
+                div { class: "banner-actions",
+                    button { class: "btn sm", onclick: move |_| tab.set(Tab::Console), Icon { name: "terminal" } "Open console" }
+                }
             }
         }
         div { class: "stats",
@@ -215,23 +217,23 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                         code { class: "address-value", if let Some(p) = public_addr.clone() { "{p}" } else { "looking up…" } }
                         button { class: "btn sm", disabled: public_addr.is_none(), "data-copy": "{public_addr.clone().unwrap_or_default()}", "Copy" }
                     }
-                    p { class: "muted small center", "Friends outside your network need UDP {inst.port} forwarded to this computer (Hytale uses QUIC, not TCP)." }
                 }
-                div { class: "facts",
-                    div { b { "{worlds}" } span { "Worlds" } }
-                    div { b { "{mods}" } span { "Active mods" } }
-                    div { b { "{inst.operators.len()}" } span { "Operators" } }
-                    div { b { if inst.offline_auth { "Offline" } else { "Online" } } span { "Auth mode" } }
-                }
+                p { class: "muted small center connect-hint", "Friends outside your network need UDP {inst.port} forwarded to this computer (Hytale uses QUIC, not TCP)." }
             }
             div { class: "panel glass",
-                PanelHead { title: "Latest console output", icon: Some("terminal"),
-                    button { class: "btn sm ghost", onclick: move |_| tab.set(Tab::Console), "Open console" Icon { name: "chevron" } }
-                }
-                pre { class: "log mini",
-                    if tail.is_empty() { span { class: "muted", "The server has not printed anything yet." } }
-                    for l in tail {
-                        div { key: "{l.seq}", class: log_class(l.kind), Linkified { text: l.text.clone() } }
+                PanelHead { title: "At a glance", icon: Some("grid") }
+                div { class: "glance",
+                    button { class: "glance-tile", onclick: move |_| tab.set(Tab::Worlds),
+                        Icon { name: "globe" } b { "{worlds}" } span { "Worlds" }
+                    }
+                    button { class: "glance-tile", onclick: move |_| tab.set(Tab::Mods),
+                        Icon { name: "box" } b { "{mods}" } span { "Active mods" }
+                    }
+                    button { class: "glance-tile", onclick: move |_| tab.set(Tab::Players),
+                        Icon { name: "shield" } b { "{inst.operators.len()}" } span { "Operators" }
+                    }
+                    button { class: "glance-tile", onclick: move |_| tab.set(Tab::Settings),
+                        Icon { name: "key" } b { if inst.offline_auth { "Offline" } else { "Online" } } span { "Auth mode" }
                     }
                 }
             }
