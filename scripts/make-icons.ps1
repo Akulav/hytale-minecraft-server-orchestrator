@@ -1,4 +1,4 @@
-# Draws the HyOrchestrator icon (the same design as assets/logo.svg) with System.Drawing and writes:
+# Draws the Hyve icon (the same design as assets/logo.svg) with System.Drawing and writes:
 #   assets/icon.png        256 x 256  (window icon, README)
 #   assets/icon-1024.png   1024 x 1024 (macOS .icns is made from it in CI)
 #   assets/icon.ico        16..256    (exe, setup, shortcuts)

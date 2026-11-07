@@ -5,6 +5,13 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-07
+### Changed
+- **HyOrchestrator is now Hyve.** New program and release file names (`hyve.exe`, `Hyve-setup.exe`,
+  `hyve-linux-x64`, `hyve-macos-arm64`, `Hyve-macos-arm64.dmg`). Installed copies update into Hyve by themselves:
+  releases also carry the files under their old names, the Windows setup keeps the same install (folder, data, Apps
+  entry) and removes the old program and shortcuts. Existing data folders keep working where they are.
+
 ## [0.3.1] - 2026-11-07
 ### Changed
 - Instance overview: the console preview is gone (the Console tab has it). Next to **Connect** there is now an

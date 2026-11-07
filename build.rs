@@ -1,12 +1,12 @@
-// Windows: embed the icon and version info into hyorchestrator.exe.
+// Windows: embed the icon and version info into hyve.exe.
 fn main() {
     println!("cargo:rerun-if-changed=assets/icon.ico");
     #[cfg(windows)]
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
         let mut res = winresource::WindowsResource::new();
         res.set_icon("assets/icon.ico")
-            .set("ProductName", "HyOrchestrator")
-            .set("FileDescription", "HyOrchestrator - Hytale server orchestrator")
+            .set("ProductName", "Hyve")
+            .set("FileDescription", "Hyve - Hytale server orchestrator")
             .set("CompanyName", "Akulav")
             .set("LegalCopyright", "Made by Akulav");
         if let Err(e) = res.compile() {

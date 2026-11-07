@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# HyOrchestrator - Build & Release
+# Hyve - Build & Release
 # ---------------------------------------------------------------------------
 # One workflow, two phases:
 #
@@ -15,12 +15,16 @@
 #               version's section of CHANGELOG.md.
 #
 # Release files (the in-app updater looks for these names - keep them):
-#   HyOrchestrator-setup.exe             Windows x64 setup (also the update)
-#   hyorchestrator-linux-x64             Linux x64, desktop window + web UI
-#   hyorchestrator-linux-x64-headless    Linux x64, web UI only (no GUI libraries)
-#   hyorchestrator-macos-arm64           macOS Apple Silicon program (update)
-#   HyOrchestrator-macos-arm64.dmg       macOS app for a first install
-#   SHA256SUMS.txt                       checksums of all of the above
+#   Hyve-setup.exe             Windows x64 setup (also the update)
+#   hyve-linux-x64             Linux x64, desktop window + web UI
+#   hyve-linux-x64-headless    Linux x64, web UI only (no GUI libraries)
+#   hyve-macos-arm64           macOS Apple Silicon program (update)
+#   Hyve-macos-arm64.dmg       macOS app for a first install
+#   SHA256SUMS.txt             checksums of all of the above
+#
+# Transition (Hyve was called HyOrchestrator before 0.4): the same files are also published as
+# HyOrchestrator-setup.exe, hyorchestrator-linux-x64(-headless) and hyorchestrator-macos-arm64,
+# because installed pre-0.4 copies look for those names. They update straight into Hyve.
 # ---------------------------------------------------------------------------
 
 name: Build
@@ -67,10 +71,10 @@ jobs:
           v=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
           echo "Cargo.toml: $v"
           [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "::error::Cargo.toml version is not x.y.z"; exit 1; }
-          iss=$(grep -m1 '#define AppVersion "' installer/hyorchestrator.iss | cut -d'"' -f2)
+          iss=$(grep -m1 '#define AppVersion "' installer/hyve.iss | cut -d'"' -f2)
           plist=$(grep -A0 -m1 'CFBundleShortVersionString' installer/Info.plist | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/')
           echo "setup: $iss, Info.plist: $plist"
-          [ "$iss" = "$v" ] || { echo "::error::installer/hyorchestrator.iss says $iss (run scripts/bump-version.ps1)"; exit 1; }
+          [ "$iss" = "$v" ] || { echo "::error::installer/hyve.iss says $iss (run scripts/bump-version.ps1)"; exit 1; }
           [ "$plist" = "$v" ] || { echo "::error::installer/Info.plist says $plist (run scripts/bump-version.ps1)"; exit 1; }
           grep -q "^## \[$v\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $v"; exit 1; }
 
@@ -89,7 +93,7 @@ jobs:
         run: |
           cargo build --release --locked
           choco install innosetup -y --no-progress
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\hyorchestrator.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\hyve.iss
 
   # --- Decide whether to release (push to main, version bumped) --------------
   prepare:
@@ -131,13 +135,13 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.prepare.outputs.version }} installer\hyorchestrator.iss
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.prepare.outputs.version }} installer\hyve.iss
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item installer\Output\HyOrchestrator-setup.exe dist\
+          Copy-Item installer\Output\Hyve-setup.exe dist\
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/HyOrchestrator-setup.exe
+          path: dist/Hyve-setup.exe
           if-no-files-found: error
 
   build-linux:
@@ -156,9 +160,9 @@ jobs:
         run: |
           cargo build --release --locked --no-default-features
           mkdir -p dist
-          cp target/release/hyorchestrator dist/hyorchestrator-linux-x64-headless
+          cp target/release/hyve dist/hyve-linux-x64-headless
           cargo build --release --locked
-          cp target/release/hyorchestrator dist/hyorchestrator-linux-x64
+          cp target/release/hyve dist/hyve-linux-x64
           chmod +x dist/*
       - uses: actions/upload-artifact@v4
         with:
@@ -183,12 +187,12 @@ jobs:
         run: |
           set -e
           v=${{ needs.prepare.outputs.version }}
-          bin=target/aarch64-apple-darwin/release/hyorchestrator
+          bin=target/aarch64-apple-darwin/release/hyve
           mkdir -p dist
-          cp "$bin" dist/hyorchestrator-macos-arm64
-          app=dmgroot/HyOrchestrator.app
+          cp "$bin" dist/hyve-macos-arm64
+          app=dmgroot/Hyve.app
           rm -rf dmgroot && mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-          cp "$bin" "$app/Contents/MacOS/hyorchestrator"
+          cp "$bin" "$app/Contents/MacOS/hyve"
           cp installer/Info.plist "$app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $v" -c "Set :CFBundleVersion $v" "$app/Contents/Info.plist"
           mkdir icon.iconset
@@ -199,7 +203,7 @@ jobs:
           iconutil -c icns icon.iconset -o "$app/Contents/Resources/icon.icns"
           codesign --force --deep --sign - "$app"
           ln -s /Applications dmgroot/Applications
-          hdiutil create -volname HyOrchestrator -srcfolder dmgroot -format UDZO -ov dist/HyOrchestrator-macos-arm64.dmg
+          hdiutil create -volname Hyve -srcfolder dmgroot -format UDZO -ov dist/Hyve-macos-arm64.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -218,10 +222,18 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Old names for pre-0.4 installs (HyOrchestrator)
+        run: |
+          cd dist
+          cp Hyve-setup.exe HyOrchestrator-setup.exe
+          cp hyve-linux-x64 hyorchestrator-linux-x64
+          cp hyve-linux-x64-headless hyorchestrator-linux-x64-headless
+          cp hyve-macos-arm64 hyorchestrator-macos-arm64
       - name: Checksums
         run: |
           cd dist
-          sha256sum HyOrchestrator-setup.exe hyorchestrator-linux-x64 hyorchestrator-linux-x64-headless hyorchestrator-macos-arm64 HyOrchestrator-macos-arm64.dmg > SHA256SUMS.txt
+          sha256sum Hyve-setup.exe hyve-linux-x64 hyve-linux-x64-headless hyve-macos-arm64 Hyve-macos-arm64.dmg \
+            HyOrchestrator-setup.exe hyorchestrator-linux-x64 hyorchestrator-linux-x64-headless hyorchestrator-macos-arm64 > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - name: Release notes (this version's CHANGELOG section)
         env:
@@ -239,14 +251,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.prepare.outputs.version }}
-          name: HyOrchestrator v${{ needs.prepare.outputs.version }}
+          name: Hyve v${{ needs.prepare.outputs.version }}
           body_path: RELEASE_NOTES.md
           prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
           files: |
+            dist/Hyve-setup.exe
+            dist/hyve-linux-x64
+            dist/hyve-linux-x64-headless
+            dist/hyve-macos-arm64
+            dist/Hyve-macos-arm64.dmg
             dist/HyOrchestrator-setup.exe
             dist/hyorchestrator-linux-x64
             dist/hyorchestrator-linux-x64-headless
             dist/hyorchestrator-macos-arm64
-            dist/HyOrchestrator-macos-arm64.dmg
             dist/SHA256SUMS.txt
           fail_on_unmatched_files: true

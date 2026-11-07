@@ -78,7 +78,7 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
                 div { class: "panel glass source",
                     div { class: "source-icon", Icon { name: "archive" } }
                     h3 { "Zip or folder" }
-                    p { class: "muted small", "A path on the machine running HyOrchestrator: a server zip, or a folder with Server/ and Assets.zip." }
+                    p { class: "muted small", "A path on the machine running Hyve: a server zip, or a folder with Server/ and Assets.zip." }
                     div { class: "source-body",
                         input { class: "input mono", placeholder: "/srv/hytale/game.zip", value: "{path}", oninput: move |e| path.set(e.value()) }
                     }

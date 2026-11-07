@@ -103,7 +103,7 @@ pub fn import_launcher(state: &Shared, patchline: String, folder: std::path::Pat
     })
 }
 
-/// Imports a server from a path on the machine running HyOrchestrator: a .zip or a folder.
+/// Imports a server from a path on the machine running Hyve: a .zip or a folder.
 pub fn import_path(state: &Shared, path: &str) -> Result<String> {
     let p = std::path::PathBuf::from(path.trim().trim_matches('"'));
     if !p.exists() {

@@ -2,14 +2,19 @@
 //! and every 6 hours (setting), or on demand (About → Check for updates).
 //!
 //! A release has one file per system, always checked against the release's SHA256SUMS.txt first:
-//! - Windows: `HyOrchestrator-setup.exe` (Inno Setup). Started on this install's folder with `/SILENT`
-//!   (a progress window, no questions); HyOrchestrator stops its servers and ends; the setup replaces the
+//! - Windows: `Hyve-setup.exe` (Inno Setup). Started on this install's folder with `/SILENT`
+//!   (a progress window, no questions); Hyve stops its servers and ends; the setup replaces the
 //!   program and starts it again.
-//! - Linux: `hyorchestrator-linux-x64` (desktop) / `hyorchestrator-linux-x64-headless`, macOS:
-//!   `hyorchestrator-macos-arm64`: the program itself, swapped in place (the old one is kept as `.old` until
+//! - Linux: `hyve-linux-x64` (desktop) / `hyve-linux-x64-headless`, macOS:
+//!   `hyve-macos-arm64`: the program itself, swapped in place (the old one is kept as `.old` until
 //!   the next start) and started again with the same arguments.
 //!
 //! A copy built on this computer (…/target/…) never replaces itself.
+//!
+//! Rename (0.4, HyOrchestrator → Hyve): copies before 0.4 look for `HyOrchestrator-setup.exe`,
+//! `hyorchestrator-linux-x64(-headless)` and `hyorchestrator-macos-arm64`. The Build workflow publishes
+//! the new files under those old names too (same bytes, both in SHA256SUMS.txt), so old installs update
+//! straight into Hyve. Keep that while people may still run a pre-0.4 version.
 
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
@@ -27,13 +32,13 @@ const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
 /// This build's release file.
 pub fn asset_name() -> &'static str {
     if cfg!(windows) {
-        "HyOrchestrator-setup.exe"
+        "Hyve-setup.exe"
     } else if cfg!(target_os = "macos") {
-        "hyorchestrator-macos-arm64"
+        "hyve-macos-arm64"
     } else if cfg!(feature = "desktop") {
-        "hyorchestrator-linux-x64"
+        "hyve-linux-x64"
     } else {
-        "hyorchestrator-linux-x64-headless"
+        "hyve-linux-x64-headless"
     }
 }
 
@@ -94,7 +99,7 @@ fn parse_release(v: &Value) -> Result<Release> {
     })
 }
 
-/// Built from source: cargo's `…/target/…`, or run.bat's `<repo>/dist/HyOrchestrator.exe`.
+/// Built from source: cargo's `…/target/…`, or run.bat's `<repo>/dist/Hyve.exe`.
 pub fn self_built(exe: &Path) -> bool {
     exe.components().any(|c| c.as_os_str() == "target")
         || exe.ancestors().nth(2).is_some_and(|repo| repo.join("Cargo.toml").is_file() && repo.join("src").join("main.rs").is_file())
@@ -203,7 +208,7 @@ pub async fn install(state: Shared, task: String) -> Result<String> {
                 tokio::time::sleep(Duration::from_millis(800)).await;
                 st.request_quit();
             });
-            Ok(format!("HyOrchestrator {} is being installed", rel.version))
+            Ok(format!("Hyve {} is being installed", rel.version))
         }
         Err(e) => Err(e),
     }
@@ -247,7 +252,7 @@ async fn install_inner(state: &Shared, task: &str, rel: &Release) -> Result<()> 
     }
 }
 
-/// Arguments for the setup when it updates (see installer/hyorchestrator.iss).
+/// Arguments for the setup when it updates (see installer/hyve.iss).
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn setup_args(app_dir: &Path, log: &Path) -> Vec<String> {
     vec![
@@ -317,7 +322,7 @@ fn relaunch(exe: &Path) -> Result<()> {
         }
     }
     cmd.process_group(0).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-    cmd.spawn().map_err(|e| anyhow!("couldn't start the new version: {e} - start HyOrchestrator again to run it"))?;
+    cmd.spawn().map_err(|e| anyhow!("couldn't start the new version: {e} - start Hyve again to run it"))?;
     Ok(())
 }
 
@@ -355,23 +360,23 @@ mod tests {
     #[test]
     fn finds_hash_in_sums() {
         let h = "b774e08051dda5228007f80eb2dbb3ca22408f4b2f83450c468603b32f73819e";
-        let sums = format!("{h}  hyorchestrator-linux-x64\r\nabc  HyOrchestrator-setup.exe\n");
-        assert_eq!(expected_hash(&sums, "hyorchestrator-linux-x64").as_deref(), Some(h));
-        assert_eq!(expected_hash(&sums, "HyOrchestrator-setup.exe"), None);
+        let sums = format!("{h}  hyve-linux-x64\r\nabc  Hyve-setup.exe\n");
+        assert_eq!(expected_hash(&sums, "hyve-linux-x64").as_deref(), Some(h));
+        assert_eq!(expected_hash(&sums, "Hyve-setup.exe"), None);
     }
 
     #[test]
     fn setup_runs_silently_on_this_folder() {
-        let a = setup_args(Path::new("C:/Users/u/AppData/Local/HyOrchestrator"), Path::new("C:/x/setup.log"));
+        let a = setup_args(Path::new("C:/Users/u/AppData/Local/Hyve"), Path::new("C:/x/setup.log"));
         assert!(a.contains(&"/SILENT".to_string()) && a.contains(&"/LAUNCH=1".to_string()));
-        assert!(a.iter().any(|x| x == "/DIR=C:/Users/u/AppData/Local/HyOrchestrator"));
+        assert!(a.iter().any(|x| x == "/DIR=C:/Users/u/AppData/Local/Hyve"));
     }
 
     #[test]
     fn swap_keeps_the_old_program() {
         let dir = std::env::temp_dir().join(format!("hyo-swap-{}", crate::state::new_id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let exe = dir.join("hyorchestrator");
+        let exe = dir.join("hyve");
         std::fs::write(&exe, b"old").unwrap();
         let new = dir.join("dl");
         std::fs::write(&new, b"new").unwrap();
@@ -385,8 +390,8 @@ mod tests {
 
     #[test]
     fn self_built_copies_are_detected() {
-        assert!(self_built(Path::new("D:/src/hyo/target/release/hyorchestrator.exe")));
-        assert!(!self_built(Path::new("C:/Users/u/AppData/Local/HyOrchestrator/hyorchestrator.exe")));
-        assert_eq!(app_bundle(Path::new("/Applications/HyOrchestrator.app/Contents/MacOS/hyorchestrator")), Some(PathBuf::from("/Applications/HyOrchestrator.app")));
+        assert!(self_built(Path::new("D:/src/hyo/target/release/hyve.exe")));
+        assert!(!self_built(Path::new("C:/Users/u/AppData/Local/Hyve/hyve.exe")));
+        assert_eq!(app_bundle(Path::new("/Applications/Hyve.app/Contents/MacOS/hyve")), Some(PathBuf::from("/Applications/Hyve.app")));
     }
 }

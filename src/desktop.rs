@@ -46,8 +46,8 @@ pub fn run(state: Shared, url: String) -> ! {
     let quit_item = {
         use muda::{Menu, MenuItem, PredefinedMenuItem, Submenu, accelerator::Accelerator};
         let menu = Menu::new();
-        let app = Submenu::new("HyOrchestrator", true);
-        let quit = MenuItem::new("Quit HyOrchestrator", true, "cmdorctrl+q".parse::<Accelerator>().ok());
+        let app = Submenu::new("Hyve", true);
+        let quit = MenuItem::new("Quit Hyve", true, "cmdorctrl+q".parse::<Accelerator>().ok());
         let _ = app.append_items(&[&PredefinedMenuItem::hide(None), &PredefinedMenuItem::separator(), &quit]);
         let edit = Submenu::new("Edit", true);
         let _ = edit.append_items(&[
@@ -70,7 +70,7 @@ pub fn run(state: Shared, url: String) -> ! {
     };
 
     let window = WindowBuilder::new()
-        .with_title("HyOrchestrator")
+        .with_title("Hyve")
         .with_inner_size(LogicalSize::new(1320.0, 860.0))
         .with_min_inner_size(LogicalSize::new(900.0, 600.0))
         .with_window_icon(window_icon())
@@ -129,7 +129,7 @@ pub fn run(state: Shared, url: String) -> ! {
             Event::UserEvent(UserEvent::Menu(id)) => {
                 if id == quit_item && !closing {
                     closing = true;
-                    window.set_title("HyOrchestrator - stopping servers…");
+                    window.set_title("Hyve - stopping servers…");
                     state.request_quit();
                 }
             }
@@ -138,7 +138,7 @@ pub fn run(state: Shared, url: String) -> ! {
                     closing = true;
                     let running = state.runtimes.read().values().filter(|r| r.status.is_active()).count();
                     if running > 0 {
-                        window.set_title(&format!("HyOrchestrator - stopping {running} server(s)…"));
+                        window.set_title(&format!("Hyve - stopping {running} server(s)…"));
                     }
                     state.request_quit();
                 }

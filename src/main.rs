@@ -1,4 +1,4 @@
-//! HyOrchestrator - run and manage Hytale servers from one place. Made by Akulav.
+//! Hyve - run and manage Hytale servers from one place. Made by Akulav.
 //!
 //! One program, two faces: with a display it opens a desktop window; without one (a Linux server over
 //! SSH, `--headless`) it serves the same UI on a local web server and prints where to open it.
@@ -31,9 +31,9 @@ use std::sync::OnceLock;
 
 use state::{AppState, Mode, Paths, Shared, VERSION};
 
-const HELP: &str = "HyOrchestrator - run and manage Hytale servers. Made by Akulav.
+const HELP: &str = "Hyve - run and manage Hytale servers. Made by Akulav.
 
-Usage: hyorchestrator [options]
+Usage: hyve [options]
 
   --headless          serve the web UI only (default when there is no display)
   --desktop           open the desktop window even if no display was detected
@@ -106,10 +106,10 @@ static LOG: OnceLock<parking_lot::Mutex<Option<std::fs::File>>> = OnceLock::new(
 
 fn init_log(dir: &std::path::Path) {
     let _ = std::fs::create_dir_all(dir);
-    let path = dir.join("hyorchestrator.log");
+    let path = dir.join("hyve.log");
     // keep one previous log
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 5 * 1024 * 1024) {
-        let _ = std::fs::rename(&path, dir.join("hyorchestrator.old.log"));
+        let _ = std::fs::rename(&path, dir.join("hyve.old.log"));
     }
     let file = std::fs::OpenOptions::new().create(true).append(true).open(path).ok();
     let _ = LOG.set(parking_lot::Mutex::new(file));
@@ -152,7 +152,7 @@ fn banner(state: &Shared) {
     let urls = state.urls.read().clone();
     let line = "─".repeat(68);
     println!("\n {line}");
-    println!("  HyOrchestrator {VERSION} · Made by Akulav");
+    println!("  Hyve {VERSION} · Made by Akulav");
     println!("  Headless mode: the web UI is served here instead of a window.");
     println!(" {line}");
     for (i, u) in urls.iter().enumerate() {
@@ -184,7 +184,7 @@ fn main() {
         return;
     }
     if args.version {
-        println!("hyorchestrator {VERSION}");
+        println!("hyve {VERSION}");
         return;
     }
 
@@ -222,7 +222,7 @@ fn main() {
         return;
     }
 
-    logln(&format!("HyOrchestrator {VERSION} starting ({mode:?}), data in {}", state.paths.root.display()));
+    logln(&format!("Hyve {VERSION} starting ({mode:?}), data in {}", state.paths.root.display()));
     updater::cleanup(&state);
     let addr = match runtime.block_on(web::serve(state.clone(), host, port)) {
         Ok(a) => a,

@@ -1,4 +1,4 @@
-// HyOrchestrator page helpers (the UI itself is rendered by the Rust server over the LiveView socket):
+// Hyve page helpers (the UI itself is rendered by the Rust server over the LiveView socket):
 // drag & drop / file-picker uploads of mods, and a "connection lost" hint.
 (function () {
   "use strict";

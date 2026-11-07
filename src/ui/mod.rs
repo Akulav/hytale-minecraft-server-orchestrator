@@ -168,7 +168,7 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
             div { class: "brand",
                 img { src: "/assets/logo.svg", width: "36", height: "36", alt: "" }
                 div {
-                    div { class: "brand-name", "HyOrchestrator" }
+                    div { class: "brand-name", "Hyve" }
                     div { class: "brand-sub", "Hytale server orchestrator" }
                 }
             }

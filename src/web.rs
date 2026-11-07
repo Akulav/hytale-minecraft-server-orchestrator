@@ -88,11 +88,11 @@ async fn auth(State(web): State<Web>, Query(q): Query<HashMap<String, String>>, 
 fn locked_page() -> String {
     format!(
         r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HyOrchestrator</title><link rel="icon" href="/assets/logo.svg"><link rel="stylesheet" href="/assets/style.css"></head>
+<title>Hyve</title><link rel="icon" href="/assets/logo.svg"><link rel="stylesheet" href="/assets/style.css"></head>
 <body class="locked"><main class="lock-card glass"><img src="/assets/logo.svg" width="64" alt="">
-<h1>HyOrchestrator</h1><p>This page needs its access link.</p>
-<p class="muted">Open the address HyOrchestrator printed when it started (it ends in <code>?token=…</code>), or run
-<code>hyorchestrator --print-url</code> on the server.</p><p class="muted small">v{VERSION} · Made by Akulav</p></main></body></html>"#
+<h1>Hyve</h1><p>This page needs its access link.</p>
+<p class="muted">Open the address Hyve printed when it started (it ends in <code>?token=…</code>), or run
+<code>hyve --print-url</code> on the server.</p><p class="muted small">v{VERSION} · Made by Akulav</p></main></body></html>"#
     )
 }
 
@@ -101,7 +101,7 @@ async fn index() -> impl IntoResponse {
     Html(format!(
         r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HyOrchestrator</title><link rel="icon" href="/assets/logo.svg"><link rel="stylesheet" href="/assets/style.css"></head>
+<title>Hyve</title><link rel="icon" href="/assets/logo.svg"><link rel="stylesheet" href="/assets/style.css"></head>
 <body><div id="main"><div class="boot"><img src="/assets/logo.svg" width="72" alt=""><p>Connecting…</p></div></div>
 <div id="conn-lost">Connection lost - reconnecting…</div>
 <script src="/assets/app.js"></script>
@@ -180,7 +180,7 @@ async fn status(State(web): State<Web>) -> impl IntoResponse {
         .collect();
     let host = st.host.read().clone();
     axum::Json(serde_json::json!({
-        "app": "HyOrchestrator", "version": VERSION,
+        "app": "Hyve", "version": VERSION,
         "host": { "cpu": host.cpu, "ram_used_mb": host.ram_used_mb, "ram_total_mb": host.ram_total_mb },
         "instances": instances,
     }))

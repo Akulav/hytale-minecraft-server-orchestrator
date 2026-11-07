@@ -6,7 +6,7 @@
 
 # ---- runtime data (server instances, worlds, multi-GB server versions, backups) ----
 /data/
-HyOrchestratorData/
+HyveData/
 universe/
 *.part
 *.zip.part

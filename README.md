@@ -2,13 +2,15 @@
 
 <img src="assets/logo.svg" width="96" alt="">
 
-# HyOrchestrator
+# Hyve
 
 **Run and manage Hytale servers from one place: a desktop app on your PC, a web panel on your headless server.**
 
-HyOrchestrator downloads the official Hytale server for you, runs as many isolated server instances as your
+Hyve downloads the official Hytale server for you, runs as many isolated server instances as your
 machine handles, and gives you live telemetry, a console, worlds with seeds, operators, drag & drop mods,
 1-click updates and backups. Written in pure Rust, front to back.
+
+<sub>Formerly <i>HyOrchestrator</i> - installed copies update into Hyve by themselves, keeping their folder and data.</sub>
 
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
 ![Linux](https://img.shields.io/badge/Linux-x86--64-f6c915)
@@ -46,7 +48,7 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
 | 🖥️ **Desktop or headless, same app** | With a screen it opens a window. Over SSH on a Linux box it serves the very same UI as a web panel and prints the link. |
 | 🦀 **Pure Rust** | Backend (tokio, axum) and UI (Dioxus) are Rust. One small program; no Node, no Docker, no Python. |
 | 📦 **Official server files** | Uses Hypixel's own Hytale Downloader CLI under your Hytale account, or the files of your installed launcher. |
-| 🔄 **Keeps everything current** | 1-click server updates (with a backup first) and an in-app updater for HyOrchestrator itself. |
+| 🔄 **Keeps everything current** | 1-click server updates (with a backup first) and an in-app updater for Hyve itself. |
 | 🧱 **Isolated instances** | Each server has its own folder, version, port, worlds, mods, operators and backups. |
 
 ## 🎀 Features
@@ -81,26 +83,26 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
 
 1. **Download** the file for your system from the [latest release](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
    and install it (see [below](#-installing-updating-and-uninstalling)).
-2. **Start HyOrchestrator.** No Java 25? Click **Install Java 25 (Temurin)** on the dashboard.
-3. **Server versions → Latest release.** HyOrchestrator fetches Hypixel's official downloader by itself. The first
+2. **Start Hyve.** No Java 25? Click **Install Java 25 (Temurin)** on the dashboard.
+3. **Server versions → Latest release.** Hyve fetches Hypixel's official downloader by itself. The first
    time a **Sign in to Hytale** card appears with a code: click **Open sign-in page** (the desktop app opens it for
    you), approve with the account that owns Hytale, and the download continues by itself. No token to paste; the
    login is saved. (Or **Import** the files of your installed Hytale launcher.)
 4. **New instance** → name, version, port, seed → **Create** → **Start**.
 5. **Settings → Hytale account → Sign in** once (also step 3 of *Get started* on the dashboard). From then on every
    server starts already signed in - no code per server or per start. (Skip it and each server asks for its own
-   code, which HyOrchestrator also shows as a card.) Players join on the address in **Connect** (Copy buttons for
+   code, which Hyve also shows as a card.) Players join on the address in **Connect** (Copy buttons for
    local and internet), UDP.
 
 > [!TIP]
-> On a Linux server without a display, just run `./hyorchestrator-linux-x64-headless`: it prints a link like
+> On a Linux server without a display, just run `./hyve-linux-x64-headless`: it prints a link like
 > `http://192.168.1.20:7520/?token=…`. Open it from any browser on your network.
 
 ## 🧰 What you need
 
 | | Minimum | Comfortable |
 |---|---|---|
-| **RAM** | 4 GB per Hytale server (Hypixel's figure) + ~100 MB for HyOrchestrator | 8 GB+ per busy server |
+| **RAM** | 4 GB per Hytale server (Hypixel's figure) + ~100 MB for Hyve | 8 GB+ per busy server |
 | **Disk** | ~4 GB per server version + your worlds and backups | an SSD |
 | **Java** | Java 25 (installed for you on request) | |
 | **OS** | Windows 10/11 x64; Linux x86-64 (WebKitGTK 4.1 for the desktop build, nothing for headless); macOS 11+ on Apple Silicon | |
@@ -110,20 +112,20 @@ machine handles, and gives you live telemetry, a console, worlds with seeds, ope
 
 | System | File | Where it lives | Shortcuts |
 |---|---|---|---|
-| Windows | `HyOrchestrator-setup.exe`: a wizard with a license page, a **folder you can change** and a **desktop icon** choice; per user, no admin rights | the folder you pick (default `%LOCALAPPDATA%\HyOrchestrator`); servers, worlds and backups in its `data\` | Start menu (+ "headless web UI"), desktop, *Settings → Apps* |
-| macOS | `HyOrchestrator-macos-arm64.dmg`: drag HyOrchestrator to Applications | data in `~/Library/Application Support/HyOrchestrator/data` (never inside the app) | Applications |
-| Linux | `hyorchestrator-linux-x64` (window) or `hyorchestrator-linux-x64-headless` (web only): `chmod +x` and run | `data/` next to the program (or `~/.local/share/HyOrchestrator/data` if that folder is read-only) | - |
+| Windows | `Hyve-setup.exe`: a wizard with a license page, a **folder you can change** and a **desktop icon** choice; per user, no admin rights | the folder you pick (default `%LOCALAPPDATA%\Hyve`); servers, worlds and backups in its `data\` | Start menu (+ "headless web UI"), desktop, *Settings → Apps* |
+| macOS | `Hyve-macos-arm64.dmg`: drag Hyve to Applications | data in `~/Library/Application Support/Hyve/data` (never inside the app) | Applications |
+| Linux | `hyve-linux-x64` (window) or `hyve-linux-x64-headless` (web only): `chmod +x` and run | `data/` next to the program (or `~/.local/share/Hyve/data` if that folder is read-only) | - |
 
-Everything HyOrchestrator keeps - instances, worlds, mods, server versions, backups, Java, settings - is in that one
+Everything Hyve keeps - instances, worlds, mods, server versions, backups, Java, settings - is in that one
 `data` folder next to the program; `--data-dir <path>` puts it anywhere else. Data from versions before 0.3
-(`%LOCALAPPDATA%\HyOrchestrator\data`) is moved next to an installed program on its first start when both are
+(`%LOCALAPPDATA%\Hyve\data`) is moved next to an installed program on its first start when both are
 on the same drive.
 
-**Updating.** HyOrchestrator checks GitHub 15 seconds after it starts and every 6 hours (Settings can turn that
+**Updating.** Hyve checks GitHub 15 seconds after it starts and every 6 hours (Settings can turn that
 off), or when you press **About → Check for updates**. **Download & install** fetches this system's file, checks it
 against the release's `SHA256SUMS.txt` (a mismatch changes nothing), stops your servers cleanly and then:
 
-- **Windows:** runs `HyOrchestrator-setup.exe` silently on your install folder; it replaces the program and starts it.
+- **Windows:** runs `Hyve-setup.exe` silently on your install folder; it replaces the program and starts it.
   Running a newer setup by hand also finds the previous install folder by itself.
 - **Linux / macOS:** swaps the program in place (the old one is kept until the next start) and starts it again
   with the same options.
@@ -132,18 +134,18 @@ against the release's `SHA256SUMS.txt` (a mismatch changes nothing), stops your 
 |---|---|
 | The program (and on Windows its shortcuts and Apps entry) | `data/`: instances, worlds, mods, versions, backups, Java, settings |
 
-**Uninstalling.** Windows: *Settings → Apps → HyOrchestrator*; it asks whether to delete the data too (default:
+**Uninstalling.** Windows: *Settings → Apps → Hyve*; it asks whether to delete the data too (default:
 keep). macOS / Linux: delete the program and, if you want, the data folder above.
 
 ## 🛰️ Desktop, headless and the command line
 
-HyOrchestrator always runs a small web server for its UI. With a display it shows that UI in a native window
+Hyve always runs a small web server for its UI. With a display it shows that UI in a native window
 (bound to `127.0.0.1` only); without one (Linux with no `DISPLAY` / `WAYLAND_DISPLAY`, a Mac over SSH, or
 `--headless`) it listens on all interfaces and prints:
 
 ```
  ────────────────────────────────────────────────────────────────────
-  HyOrchestrator 0.1.0 · Made by Akulav
+  Hyve 0.1.0 · Made by Akulav
   Headless mode: the web UI is served here instead of a window.
  ────────────────────────────────────────────────────────────────────
   Local:    http://127.0.0.1:7520/?token=4f9c…
@@ -168,7 +170,7 @@ Run it as a service on Linux, for example with systemd:
 
 ```ini
 [Service]
-ExecStart=/opt/hyorchestrator/hyorchestrator-linux-x64-headless --data-dir /srv/hyorchestrator
+ExecStart=/opt/hyve/hyve-linux-x64-headless --data-dir /srv/hyve
 User=hytale
 Restart=on-failure
 KillSignal=SIGTERM
@@ -189,7 +191,7 @@ flowchart LR
 - **The UI** is a Dioxus component tree rendered on the server (LiveView): the browser or the window only shows it
   over a WebSocket. Drag & drop uploads go straight to `POST /api/instances/<id>/mods`.
 - **A server** is `java [-Xms -Xmx -XX:AOTCache] -jar HytaleServer.jar --assets <version>/Assets.zip --bind 0.0.0.0:<port>`
-  in its instance folder, with `HYTALE_DISABLE_UPDATES=1` (HyOrchestrator handles updates). Commands go to its
+  in its instance folder, with `HYTALE_DISABLE_UPDATES=1` (Hyve handles updates). Commands go to its
   stdin; players, login prompts and the boot line are read from its output. **Stop** sends `/stop` and waits up to
   45 s before killing it.
 - **Versions** live once in `data/versions/<version>` (`Server/` + `Assets.zip`); each instance copies `Server/` and
@@ -211,7 +213,7 @@ flowchart LR
 
 ## 🔒 Privacy and safety
 
-- Everything stays on your machine. HyOrchestrator talks to the internet only to download the Hytale downloader /
+- Everything stays on your machine. Hyve talks to the internet only to download the Hytale downloader /
   server files (Hypixel), Temurin Java (Adoptium) and its own updates (GitHub), to sign servers in with your Hytale
   account (Hypixel's OAuth and session services), and to look up your public IP for the Copy button (api.ipify.org).
 - The Hytale account login (a refresh token) is kept in `data/hytale-account.json` (owner-only permissions on
@@ -224,7 +226,7 @@ flowchart LR
 ## 🛠️ Building from source
 
 **Windows:** double-click **`run.bat`**: it builds the program and (if Inno Setup 6 is installed) the setup, copies
-them to `dist\` and starts HyOrchestrator.
+them to `dist\` and starts Hyve.
 
 | Command | What it does |
 |---|---|
@@ -236,7 +238,7 @@ them to `dist\` and starts HyOrchestrator.
 **By hand, any system:**
 
 ```bash
-cargo build --release                         # desktop + web → target/release/hyorchestrator(.exe)
+cargo build --release                         # desktop + web → target/release/hyve(.exe)
 cargo build --release --no-default-features   # headless only (no GUI libraries)
 ```
 
@@ -259,11 +261,11 @@ GitHub's Windows, Linux and macOS runners, create the tag `vX.Y.Z` and publish:
 
 | File | |
 |---|---|
-| `HyOrchestrator-setup.exe` | Windows setup; also what an update runs |
-| `hyorchestrator-linux-x64` | Linux program with the desktop window |
-| `hyorchestrator-linux-x64-headless` | Linux program, web UI only |
-| `hyorchestrator-macos-arm64` | macOS program; what an update downloads |
-| `HyOrchestrator-macos-arm64.dmg` | HyOrchestrator.app for a first install |
+| `Hyve-setup.exe` | Windows setup; also what an update runs |
+| `hyve-linux-x64` | Linux program with the desktop window |
+| `hyve-linux-x64-headless` | Linux program, web UI only |
+| `hyve-macos-arm64` | macOS program; what an update downloads |
+| `Hyve-macos-arm64.dmg` | Hyve.app for a first install |
 | `SHA256SUMS.txt` | checksums of all of the above |
 
 ## 🧪 Tests
@@ -279,7 +281,7 @@ cargo clippy --all-targets --no-default-features -- -D warnings
 ```
 run.bat, scripts/            one-click build, version bump, icon generator
 .github/workflows/build.yml  checks on 3 systems → release builds → tag + release
-installer/                   hyorchestrator.iss (Windows setup), Info.plist (macOS app)
+installer/                   hyve.iss (Windows setup), Info.plist (macOS app)
 assets/                      logo, icons, style.css, app.js (drag & drop) - embedded in the program
 src/                         the Rust program (see CLAUDE.md for a file-by-file map)
 ```
@@ -290,25 +292,25 @@ src/                         the Rust program (see CLAUDE.md for a file-by-file 
 |---|---|
 | "Java 25 or newer is required" | Dashboard or Settings → **Install Java 25 (Temurin)**, or set the path to your own Java 25. |
 | Players can't connect | Forward / allow **UDP** (not TCP) on the instance's port. On the server, check the **Log in** banner: an unauthenticated server rejects players. |
-| The server forgets its login after a restart | HyOrchestrator sends `/auth persistence Encrypted` after each sign-in; use **Sign in again** on the instance page, or type it in the console. |
+| The server forgets its login after a restart | Hyve sends `/auth persistence Encrypted` after each sign-in; use **Sign in again** on the instance page, or type it in the console. |
 | The sign-in code expired | Start the download again (or **Sign in again** for a server): a new code appears. Server versions → **Sign out** forgets the downloader's saved login. |
 | The player list stays empty | The console wording may differ in your Hytale version: set your own join / leave patterns in Settings. |
 | Downloader on a Mac | Hypixel ships it for Windows and Linux only: use **Import from your Hytale launcher**. |
 | Linux: "cannot create the web view" | Install WebKitGTK 4.1, or use the `-headless` build / `--headless`. |
-| macOS: "HyOrchestrator can't be opened" | Right-click it in Applications → *Open* (the app is signed ad hoc). |
-| Forgot the web link | `hyorchestrator --print-url`, or Settings → Web UI in the desktop window. |
+| macOS: "Hyve can't be opened" | Right-click it in Applications → *Open* (the app is signed ad hoc). |
+| Forgot the web link | `hyve --print-url`, or Settings → Web UI in the desktop window. |
 
 ## 📄 License
 
-HyOrchestrator is **source-available**, not open source: you may use the releases, read the code and modify it
+Hyve is **source-available**, not open source: you may use the releases, read the code and modify it
 privately, but not redistribute it or use it commercially. See [LICENSE](LICENSE). Third-party components keep
-their own licenses. Hytale is a trademark of Hypixel Studios; HyOrchestrator is not affiliated with them.
+their own licenses. Hytale is a trademark of Hypixel Studios; Hyve is not affiliated with them.
 
 ---
 
 <div align="center">
 
-<img src="assets/logo.svg" width="40" alt="HyOrchestrator logo">
+<img src="assets/logo.svg" width="40" alt="Hyve logo">
 
 **Made by [Akulav](https://github.com/Akulav)**
 

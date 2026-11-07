@@ -9,7 +9,7 @@
 //!    `HYTALE_SERVER_SESSION_TOKEN` / `HYTALE_SERVER_IDENTITY_TOKEN` and `--owner-uuid`. The server never
 //!    asks to sign in and refreshes its session by itself while it runs.
 //! 3. A keep-alive refreshes the stored token weekly, so it never reaches its 30-day expiry while
-//!    HyOrchestrator runs now and then.
+//!    Hyve runs now and then.
 //!
 //! The login lives in `data/hytale-account.json` (owner-only permissions on Linux / macOS).
 

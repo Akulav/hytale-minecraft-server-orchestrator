@@ -1,27 +1,35 @@
-; HyOrchestrator Windows setup (Inno Setup 6): Welcome, License, Folder, Shortcuts (desktop icon),
-; Install, Finish ("Launch HyOrchestrator"). Per user, no administrator rights, with an uninstaller.
+; Hyve Windows setup (Inno Setup 6): Welcome, License, Folder, Shortcuts (desktop icon),
+; Install, Finish ("Launch Hyve"). Per user, no administrator rights, with an uninstaller.
 ; The Build workflow compiles it:
 ;
-;   iscc /DAppVersion=0.1.0 installer\hyorchestrator.iss
+;   iscc /DAppVersion=0.1.0 installer\hyve.iss
 ;
-; Updates: this setup is also the update. HyOrchestrator's in-app updater (src/updater.rs) downloads it
+; Updates: this setup is also the update. Hyve's in-app updater (src/updater.rs) downloads it
 ; and runs it on the install folder:
 ;
-;   HyOrchestrator-setup.exe /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LAUNCH=1 /DIR=<folder> /LOG=<file>
+;   Hyve-setup.exe /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LAUNCH=1 /DIR=<folder> /LOG=<file>
 ;
 ; Run by hand over an existing install it finds the previous folder by itself (same AppId +
-; UsePreviousAppDir), stops a running HyOrchestrator from that folder, replaces the program and keeps the
-; data (instances, worlds, backups in %LOCALAPPDATA%\HyOrchestrator\data).
+; UsePreviousAppDir), stops a running Hyve from that folder, replaces the program and keeps the
+; data (instances, worlds, backups in "data" next to the program).
+;
+; Hyve was called HyOrchestrator before 0.4. The AppId is unchanged, so this setup updates such an install
+; in place: same folder and data, the Apps entry is renamed, and the old hyorchestrator.exe and its
+; shortcuts are removed ([InstallDelete]).
 
 #ifndef AppVersion
   ; scripts\bump-version.ps1 keeps this in sync with Cargo.toml
-  #define AppVersion "0.3.1"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef Exe
-  #define Exe "..\target\release\hyorchestrator.exe"
+  #define Exe "..\target\release\hyve.exe"
 #endif
 #ifndef Name
-  #define Name "HyOrchestrator"
+  #define Name "Hyve"
+#endif
+#ifndef OldName
+  ; the name before 0.4, for removing its shortcuts (tests pass a throwaway name)
+  #define OldName "HyOrchestrator"
 #endif
 #ifndef Guid
   ; never change it: it is how an update or the uninstaller finds this install
@@ -57,9 +65,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 LicenseFile=..\LICENSE
 OutputDir=Output
-OutputBaseFilename=HyOrchestrator-setup
+OutputBaseFilename=Hyve-setup
 SetupIconFile=..\assets\icon.ico
-UninstallDisplayIcon={app}\hyorchestrator.exe
+UninstallDisplayIcon={app}\hyve.exe
 UninstallDisplayName={#Name}
 WizardStyle=modern
 Compression=lzma2/max
@@ -72,27 +80,35 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 AppComment=Run and manage Hytale servers - made by Akulav
-DeleteData=HyOrchestrator is uninstalled.%n%nAlso delete its data in %1 ?%nThat deletes every server instance, world, mod, downloaded server version and backup for good.%n%nNo keeps them: installing HyOrchestrator again brings everything back.
+DeleteData=Hyve is uninstalled.%n%nAlso delete its data in %1 ?%nThat deletes every server instance, world, mod, downloaded server version and backup for good.%n%nNo keeps them: installing Hyve again brings everything back.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "{#Exe}"; DestDir: "{app}"; DestName: "hyorchestrator.exe"; Flags: ignoreversion
+Source: "{#Exe}"; DestDir: "{app}"; DestName: "hyve.exe"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#Name}"; Filename: "{app}\hyorchestrator.exe"; WorkingDir: "{app}"; Comment: "{cm:AppComment}"
-Name: "{autoprograms}\{#Name} (headless web UI)"; Filename: "{app}\hyorchestrator.exe"; Parameters: "--headless"; WorkingDir: "{app}"; Comment: "Serve the web UI without a window"
-Name: "{autodesktop}\{#Name}"; Filename: "{app}\hyorchestrator.exe"; WorkingDir: "{app}"; Comment: "{cm:AppComment}"; Tasks: desktopicon
+Name: "{autoprograms}\{#Name}"; Filename: "{app}\hyve.exe"; WorkingDir: "{app}"; Comment: "{cm:AppComment}"
+Name: "{autoprograms}\{#Name} (headless web UI)"; Filename: "{app}\hyve.exe"; Parameters: "--headless"; WorkingDir: "{app}"; Comment: "Serve the web UI without a window"
+Name: "{autodesktop}\{#Name}"; Filename: "{app}\hyve.exe"; WorkingDir: "{app}"; Comment: "{cm:AppComment}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\hyorchestrator.exe"; Description: "{cm:LaunchProgram,{#Name}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\hyve.exe"; Description: "{cm:LaunchProgram,{#Name}}"; Flags: nowait postinstall skipifsilent
 ; an update started by the in-app updater: start the new version when the silent install is done
-Filename: "{app}\hyorchestrator.exe"; Parameters: "--after-update"; WorkingDir: "{app}"; Flags: nowait; Check: LaunchAfterUpdate
+Filename: "{app}\hyve.exe"; Parameters: "--after-update"; WorkingDir: "{app}"; Flags: nowait; Check: LaunchAfterUpdate
+
+[InstallDelete]
+; left over from HyOrchestrator (before 0.4)
+Type: files; Name: "{app}\hyorchestrator.exe"
+Type: files; Name: "{app}\hyorchestrator.exe.old"
+Type: files; Name: "{autoprograms}\{#OldName}.lnk"
+Type: files; Name: "{autoprograms}\{#OldName} (headless web UI).lnk"
+Type: files; Name: "{autodesktop}\{#OldName}.lnk"
 
 [UninstallDelete]
-Type: files; Name: "{app}\hyorchestrator.exe.old"
+Type: files; Name: "{app}\hyve.exe.old"
 
 [Code]
 // The data folder (instances, worlds, versions, backups): "data" next to the program, in the folder
@@ -103,18 +119,21 @@ begin
   Result := ExpandConstant('{app}\data');
   if not DirExists(Result) then
     Result := ExpandConstant('{localappdata}\{#Name}\data');
+  if not DirExists(Result) then
+    Result := ExpandConstant('{localappdata}\HyOrchestrator\data');
 end;
 
-// A running HyOrchestrator from this folder is asked to close, then ended (it stops its servers first
-// when closed normally; the in-app updater has already stopped them).
+// A running Hyve (or HyOrchestrator, before 0.4) from this folder is asked to close, then ended (it stops
+// its servers first when closed normally; the in-app updater has already stopped them).
 procedure StopRunning(Dir: String);
 var
   Code: Integer;
 begin
   Exec('powershell.exe',
-       '-NoProfile -NonInteractive -Command "$p = Get-Process hyorchestrator -ErrorAction SilentlyContinue | ' +
-       'Where-Object { $_.Path -eq ''' + Dir + '\hyorchestrator.exe'' }; $p | ForEach-Object { $_.CloseMainWindow() | Out-Null }; ' +
-       'Start-Sleep -Seconds 8; $p | Where-Object { -not $_.HasExited } | Stop-Process -Force"',
+       '-NoProfile -NonInteractive -Command "$p = Get-Process hyve, hyorchestrator -ErrorAction SilentlyContinue | ' +
+       'Where-Object { $_.Path -eq ''' + Dir + '\hyve.exe'' -or $_.Path -eq ''' + Dir + '\hyorchestrator.exe'' }; ' +
+       '$p | ForEach-Object { $_.CloseMainWindow() | Out-Null }; ' +
+       'if ($p) { Start-Sleep -Seconds 8 }; $p | Where-Object { -not $_.HasExited } | Stop-Process -Force"',
        '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 

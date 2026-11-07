@@ -26,7 +26,7 @@ pub fn SettingsPage(tick: u64) -> Element {
             AccountPanel { tick }
             div { class: "panel glass",
                 h3 { "Java" }
-                p { class: "muted small", "Hytale servers need Java 25. HyOrchestrator uses, in order: the path below, its own Temurin copy, JAVA_HOME, then java on the PATH." }
+                p { class: "muted small", "Hytale servers need Java 25. Hyve uses, in order: the path below, its own Temurin copy, JAVA_HOME, then java on the PATH." }
                 if java.major > 0 {
                     div { class: "kv",
                         span { "Found" } b { class: "mono small", "{java.path}" }
@@ -52,7 +52,7 @@ pub fn SettingsPage(tick: u64) -> Element {
             }
             div { class: "panel glass",
                 h3 { "Web UI" }
-                p { class: "muted small", "The same interface is served on a local port. Without a display (headless) HyOrchestrator only runs this web server and prints these links." }
+                p { class: "muted small", "The same interface is served on a local port. Without a display (headless) Hyve only runs this web server and prints these links." }
                 ul { class: "list links",
                     for u in urls { li { key: "{u}", Icon { name: "link" } Linkified { text: u.clone() } } }
                 }
@@ -76,7 +76,7 @@ pub fn SettingsPage(tick: u64) -> Element {
             }
             div { class: "panel glass",
                 h3 { "Updates" }
-                Check { label: "Check GitHub for new HyOrchestrator versions (at start and every 6 hours)", checked: f.check_updates, onchange: move |v| form.write().check_updates = v }
+                Check { label: "Check GitHub for new Hyve versions (at start and every 6 hours)", checked: f.check_updates, onchange: move |v| form.write().check_updates = v }
             }
             div { class: "panel glass",
                 h3 { "Player detection (advanced)" }
@@ -132,7 +132,7 @@ pub fn AccountPanel(tick: u64) -> Element {
     rsx! {
         div { class: "panel glass account",
             PanelHead { title: "Hytale account", icon: Some("key"),
-                desc: "Sign in once and every server starts already signed in - no code each time you start one. Uses Hytale's official server token flow; the login refreshes itself and only needs renewing after 30 days without HyOrchestrator running." }
+                desc: "Sign in once and every server starts already signed in - no code each time you start one. Uses Hytale's official server token flow; the login refreshes itself and only needs renewing after 30 days without Hyve running." }
             if let Some(t) = task {
                 TaskCard { task: t, expanded: false }
             } else if let Some(a) = account {
@@ -183,7 +183,7 @@ pub fn AboutPage(tick: u64) -> Element {
         div { class: "page narrow",
             div { class: "about glass",
                 img { src: "/assets/logo.svg", width: "88", height: "88", alt: "" }
-                h1 { "HyOrchestrator" }
+                h1 { "Hyve" }
                 p { class: "muted", "Run and manage Hytale servers from one place - on your desktop or headless on a server." }
                 p { class: "version", "Version {VERSION}" }
                 p { class: "made-by big", "Made by " a { href: "https://github.com/Akulav", target: "_blank", rel: "noopener", "Akulav" } }
@@ -200,7 +200,7 @@ pub fn AboutPage(tick: u64) -> Element {
                 }
                 if let Some(rel) = u.available.clone() {
                     Banner { kind: "info", icon: "zap",
-                        b { "HyOrchestrator {rel.version} is available. " }
+                        b { "Hyve {rel.version} is available. " }
                         a { href: "{rel.url}", target: "_blank", rel: "noopener", "What's new" }
                         if !rel.notes.is_empty() { pre { class: "notes", "{rel.notes}" } }
                         div { class: "banner-actions",
@@ -209,7 +209,7 @@ pub fn AboutPage(tick: u64) -> Element {
                             } else {
                                 button { class: "btn sm primary", disabled: u.installing,
                                     onclick: move |_| {
-                                        crate::state::spawn_task(&s2, "Update HyOrchestrator", None, crate::updater::install);
+                                        crate::state::spawn_task(&s2, "Update Hyve", None, crate::updater::install);
                                         toast.ok("Downloading the update - servers are stopped cleanly before it installs");
                                     },
                                     if u.installing { "Installing…" } else { "Download & install" }
@@ -232,7 +232,7 @@ pub fn AboutPage(tick: u64) -> Element {
                 }
             }
             div { class: "panel glass small muted",
-                p { "HyOrchestrator is source-available (see LICENSE). Hytale is a trademark of Hypixel Studios; this tool is not affiliated with them. Server files are downloaded with Hypixel's own downloader under your Hytale account." }
+                p { "Hyve is source-available (see LICENSE). Hytale is a trademark of Hypixel Studios; this tool is not affiliated with them. Server files are downloaded with Hypixel's own downloader under your Hytale account." }
             }
         }
     }

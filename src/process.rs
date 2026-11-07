@@ -306,7 +306,7 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Windows: servers join a job object that ends them when HyOrchestrator ends - even if it crashes - so no
+/// Windows: servers join a job object that ends them when Hyve ends - even if it crashes - so no
 /// orphaned server keeps holding its port (Linux does the same with the parent-death signal). A normal
 /// quit stops them cleanly with `/stop` first.
 #[cfg(windows)]

@@ -1,24 +1,25 @@
-# CLAUDE.md – HyOrchestrator
+# CLAUDE.md – Hyve
 
-HyOrchestrator (made by **Akulav**) runs and manages Hytale dedicated servers on **Windows x64, Linux x64 and macOS
+Hyve (made by **Akulav**) runs and manages Hytale dedicated servers on **Windows x64, Linux x64 and macOS
 (Apple Silicon)**. Pure Rust: tokio + axum backend, Dioxus 0.7 **LiveView** UI (components rendered on the server,
 shown over a WebSocket), a wry/tao desktop window that just displays that UI, and a headless mode that serves it
-as a web panel. Dev machine: Windows 11.
+as a web panel. Dev machine: Windows 11. It was called **HyOrchestrator** before 0.4 (the GitHub repo is still
+`Akulav/hytale-server-orchestrator`); see "Rename" below before touching names, folders or release files.
 
 ## Always: bump the version, prove it works, commit
 The owner wants every change set to ship as a release. For **every** change (feature, fix, cleanup):
 1. Note it under `## [Unreleased]` in `CHANGELOG.md`, then run `scripts\bump-version.ps1` with `patch`
    (fixes / cleanup), `minor` (anything user-visible added) or `major` (only when asked). It updates `Cargo.toml`,
-   `Cargo.lock`, `installer/hyorchestrator.iss`, `installer/Info.plist` and turns `[Unreleased]` into the version.
+   `Cargo.lock`, `installer/hyve.iss`, `installer/Info.plist` and turns `[Unreleased]` into the version.
    Not optional, don't ask.
 2. Verify before saying it is done, and report each result honestly (paste failures):
    - `cargo clippy --all-targets -- -D warnings` **and** `cargo clippy --all-targets --no-default-features -- -D warnings`
    - `cargo test`
-   - UI changes: run `target\debug\hyorchestrator.exe --headless --data-dir <scratch> --port 7600 --host 127.0.0.1`,
+   - UI changes: run `target\debug\hyve.exe --headless --data-dir <scratch> --port 7600 --host 127.0.0.1`,
      open the printed `?token=` link in the browser pane and exercise the change. A fake `HytaleServer.jar`
      (a tiny Java main that prints `Hytale Server Booted!`, `Adding player 'X'`, echoes stdin and exits on `/stop`)
      is enough to test start/stop/console/players/backups without real Hytale files.
-   - `installer/` changed: compile it (`%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe installer\hyorchestrator.iss`).
+   - `installer/` changed: compile it (`%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe installer\hyve.iss`).
    - workflow changed: the YAML must parse.
 3. Commit as `Release vX.Y.Z: <short summary>` and give the user the ready-to-run git commands. Pushing (which
    publishes the release) stays the user's call; they push from GitHub Desktop.
@@ -37,10 +38,15 @@ The owner wants every change set to ship as a release. For **every** change (fea
   setup compiles) on ubuntu-22.04 / windows / macos → on a push to `main` whose version has no release: build
   Windows (setup), Linux (desktop + `-headless`), macOS arm64 (.app + .dmg, ad-hoc signed) → `SHA256SUMS.txt` →
   tag `vX.Y.Z` + release (notes = the version's CHANGELOG section). **Never create `v*` tags by hand.**
-- Release file names are read by installed copies (`updater::asset_name`): `HyOrchestrator-setup.exe`,
-  `hyorchestrator-linux-x64`, `hyorchestrator-linux-x64-headless`, `hyorchestrator-macos-arm64`,
-  `HyOrchestrator-macos-arm64.dmg`, `SHA256SUMS.txt`. Keep them.
-- Inno Setup (`installer/hyorchestrator.iss`): per user, folder page + desktop-icon task, `UsePreviousAppDir` so
+- Release file names are read by installed copies (`updater::asset_name`): `Hyve-setup.exe`,
+  `hyve-linux-x64`, `hyve-linux-x64-headless`, `hyve-macos-arm64`,
+  `Hyve-macos-arm64.dmg`, `SHA256SUMS.txt`. Keep them.
+- **Rename (0.4, HyOrchestrator → Hyve).** The release job also publishes the files under the old names
+  (`HyOrchestrator-setup.exe`, `hyorchestrator-linux-x64(-headless)`, `hyorchestrator-macos-arm64`, in
+  SHA256SUMS too) so pre-0.4 installs update straight into Hyve - keep that for a good while. The setup keeps
+  the AppId, removes `hyorchestrator.exe` + old shortcuts (`[InstallDelete]`) and stops either process.
+  `Paths::user_root` keeps using an existing `…/HyOrchestrator/data` (never moved). The web cookie stays `hyo_token`.
+- Inno Setup (`installer/hyve.iss`): per user, folder page + desktop-icon task, `UsePreviousAppDir` so
   updates find the old folder. **Never change the AppId GUID.** Update mode: `/SILENT … /LAUNCH=1 /DIR=<dir>`.
 
 ## Layout
@@ -65,7 +71,7 @@ src/
   updater.rs    GitHub releases check, SHA-256 verified install, Windows setup / Unix swap + relaunch
   archive.rs    zip extract/pack, tree copy; download.rs HTTP download with task progress
 assets/         style.css (dark glass theme), app.js (drag & drop uploads, connection hint), logo.svg, icons
-installer/      hyorchestrator.iss, Info.plist
+installer/      hyve.iss, Info.plist
 scripts/        bump-version.ps1, make-icons.ps1
 ```
 
@@ -91,11 +97,11 @@ scripts/        bump-version.ps1, make-icons.ps1
 ## Conventions & gotchas
 - Data folder (`Paths::default_root`): `data/` next to the program; per-user folder for builds from source
   (`…/target/…`), the macOS bundle, or a read-only program folder. Old per-user data is moved only by an installed
-  copy (uninstaller next to it). Never test that move against the real `%LOCALAPPDATA%\HyOrchestrator\data`.
+  copy (uninstaller next to it). Never test that move against the real `%LOCALAPPDATA%\HyOrchestrator\data` or `%LOCALAPPDATA%\Hyve\data`.
 - Server sign-in order: saved Hytale account (token passthrough, no prompt) → else the server's own device prompt
   (auto-started, `/auth persistence Encrypted` after success). Tokens go in env vars, never in logged arguments.
 - Never hold a `parking_lot` guard across `.await`.
-- Server processes end with HyOrchestrator even on a crash: Windows job object (`process::job`, kill-on-close),
+- Server processes end with Hyve even on a crash: Windows job object (`process::job`, kill-on-close),
   Linux `PR_SET_PDEATHSIG`. A normal quit / window close stops them cleanly with `/stop` first (`stop_all`).
 - UI sessions run on dioxus-liveview's own local runtimes: long work goes to the main runtime (`state.rt`, `run_job`,
   `spawn_task`). Call `state.notify()` after changing anything the UI shows.

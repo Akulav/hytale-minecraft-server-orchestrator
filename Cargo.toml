@@ -1,8 +1,8 @@
 [package]
-name = "hyorchestrator"
+name = "hyve"
 # The app version. scripts/bump-version.ps1 keeps Cargo.lock, the setup script and CHANGELOG.md in sync.
-version = "0.3.1"
-description = "HyOrchestrator - run and manage Hytale servers from one place. Made by Akulav."
+version = "0.4.0"
+description = "Hyve - run and manage Hytale servers from one place. Made by Akulav."
 authors = ["Akulav"]
 edition = "2024"
 license-file = "LICENSE"
@@ -11,7 +11,7 @@ publish = false
 
 [features]
 # `desktop` opens a native window (wry/tao). Without it the program is headless-only: the web UI on a port.
-# The Linux release ships both builds: hyorchestrator-linux-x64 (desktop) and -headless (no GUI libraries needed).
+# The Linux release ships both builds: hyve-linux-x64 (desktop) and -headless (no GUI libraries needed).
 default = ["desktop"]
 desktop = ["dep:wry", "dep:tao", "dep:png", "dep:muda"]
 

@@ -10,9 +10,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::{mpsc, watch};
 
-pub const APP_NAME: &str = "HyOrchestrator";
+pub const APP_NAME: &str = "Hyve";
+/// The name before 0.4 (folders and release files of older installs).
+pub const OLD_APP_NAME: &str = "HyOrchestrator";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const USER_AGENT: &str = concat!("HyOrchestrator/", env!("CARGO_PKG_VERSION"), " (+https://github.com/Akulav/hytale-server-orchestrator)");
+pub const USER_AGENT: &str = concat!("Hyve/", env!("CARGO_PKG_VERSION"), " (+https://github.com/Akulav/hytale-server-orchestrator)");
 /// Default Hytale server port (UDP, QUIC).
 pub const DEFAULT_GAME_PORT: u16 = 5520;
 /// Default port of the orchestrator's own web UI.
@@ -67,11 +69,16 @@ impl Paths {
         }
     }
 
-    /// The per-user location: `%LOCALAPPDATA%\HyOrchestrator\data`, `~/.local/share/HyOrchestrator/data`,
-    /// `~/Library/Application Support/HyOrchestrator/data`. Used when the program's own folder can't hold
+    /// The per-user location: `%LOCALAPPDATA%\Hyve\data`, `~/.local/share/Hyve/data`,
+    /// `~/Library/Application Support/Hyve/data`. Used when the program's own folder can't hold
     /// the data (macOS app bundle, read-only folder, a build from source) and by versions before 0.3.
+    /// A folder from before the rename (`…/HyOrchestrator/data`) keeps being used as it is - it is
+    /// never moved, because an installed copy may live in that very folder.
     pub fn user_root() -> PathBuf {
-        dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join(APP_NAME).join("data")
+        let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+        let new = base.join(APP_NAME).join("data");
+        let old = base.join(OLD_APP_NAME).join("data");
+        if !new.is_dir() && old.is_dir() { old } else { new }
     }
 
     /// Where the data goes by default: a `data` folder next to the program, i.e. in the folder chosen
@@ -177,7 +184,7 @@ pub struct Settings {
     pub lan_access: bool,
     /// Secret that every web UI request must carry (cookie or `?token=`).
     pub web_token: String,
-    /// Look for a new HyOrchestrator release on GitHub at start and every 6 hours.
+    /// Look for a new Hyve release on GitHub at start and every 6 hours.
     pub check_updates: bool,
     /// Override the console patterns that detect players joining / leaving (regex, group 1 = name).
     pub join_pattern: String,
@@ -697,10 +704,10 @@ mod tests {
     #[test]
     fn data_lives_next_to_the_installed_program() {
         let t = std::env::temp_dir().join(format!("hyo-root-{}", new_id()));
-        let app = t.join("Games").join("HyOrchestrator");
-        let legacy = t.join("LocalAppData").join("HyOrchestrator").join("data");
+        let app = t.join("Games").join("Hyve");
+        let legacy = t.join("LocalAppData").join("Hyve").join("data");
         std::fs::create_dir_all(&app).unwrap();
-        let exe = app.join("hyorchestrator.exe");
+        let exe = app.join("hyve.exe");
         std::fs::write(&exe, b"").unwrap();
 
         // fresh install, nothing old: data next to the program
@@ -722,7 +729,7 @@ mod tests {
         assert_eq!(Paths::choose_root(&exe, legacy.clone()), (app.join("data"), None));
 
         // a build from source keeps using the per-user folder
-        let dev = t.join("repo").join("target").join("debug").join("hyorchestrator.exe");
+        let dev = t.join("repo").join("target").join("debug").join("hyve.exe");
         assert_eq!(Paths::choose_root(&dev, legacy.clone()).0, legacy);
         let _ = std::fs::remove_dir_all(t);
     }
