@@ -4,29 +4,36 @@
 use dioxus::prelude::*;
 
 use super::{Banner, ConfirmButton, Empty, Icon, Linkified, LoginCard, Meter, Page, PanelHead, Spark, Stat, TaskCard, run_job, use_state, use_toast};
-use crate::state::{LogKind, Mode, Status, human_bytes, human_duration, now_ms};
+use crate::state::{Game, Loader, LogKind, Mode, Status, human_bytes, human_duration, now_ms};
 use crate::{actions, backup, instance, process};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Tab {
+pub enum Tab {
     Overview,
     Console,
     Worlds,
     Players,
     Mods,
+    Properties,
     Backups,
     Settings,
 }
 
-const TABS: [(Tab, &str, &str); 7] = [
-    (Tab::Overview, "Overview", "grid"),
-    (Tab::Console, "Console", "terminal"),
-    (Tab::Worlds, "Worlds", "globe"),
-    (Tab::Players, "Players", "users"),
-    (Tab::Mods, "Mods", "box"),
-    (Tab::Backups, "Backups", "archive"),
-    (Tab::Settings, "Settings", "settings"),
-];
+fn tabs(game: Game) -> Vec<(Tab, &'static str, &'static str)> {
+    let mut t = vec![
+        (Tab::Overview, "Overview", "grid"),
+        (Tab::Console, "Console", "terminal"),
+        (Tab::Worlds, "Worlds", "globe"),
+        (Tab::Players, "Players", "users"),
+        (Tab::Mods, "Mods", "box"),
+    ];
+    if game == Game::Minecraft {
+        t.push((Tab::Properties, "Properties", "sliders"));
+    }
+    t.push((Tab::Backups, "Backups", "archive"));
+    t.push((Tab::Settings, "Settings", "settings"));
+    t
+}
 
 #[component]
 pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
@@ -44,6 +51,12 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
     let status_css = status.css();
     let status_label = status.label();
     let busy = task.is_some();
+    let software = instance::software_label(&inst);
+    let update_hint = match (inst.game, inst.loader) {
+        (Game::Hytale, _) => "Back up, download the latest version of this patchline, swap it in and restart",
+        (Game::Minecraft, Loader::Vanilla) => "Back up, install the newest Minecraft release (the world is upgraded) and restart",
+        (Game::Minecraft, _) => "Back up, install the newest loader build for this Minecraft version and restart",
+    };
 
     rsx! {
         div { class: "page",
@@ -56,9 +69,9 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
                             span { class: "pill {status_css}", span { class: "dot {status_css}" } "{status_label}" }
                         }
                         div { class: "chips",
-                            span { class: "chip", "Hytale {inst.version}" }
-                            span { class: "chip", "{inst.patchline}" }
-                            span { class: "chip", "UDP {inst.port}" }
+                            span { class: "chip", "{software}" }
+                            if inst.game == Game::Hytale { span { class: "chip", "{inst.patchline}" } }
+                            span { class: "chip", "{inst.game.protocol()} {inst.port}" }
                             span { class: "chip", "{inst.max_memory_mb / 1024} GB RAM" }
                         }
                     }
@@ -79,7 +92,7 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
                             Icon { name: "play" } "Start"
                         }
                     }
-                    button { class: "btn", disabled: busy, title: "Back up, download the latest version of this patchline, swap it in and restart",
+                    button { class: "btn", disabled: busy, title: "{update_hint}",
                         onclick: move |_| toast.result(actions::update_instance(&s5, &i5), "Update started - progress below"),
                         Icon { name: "zap" } "Update"
                     }
@@ -96,7 +109,7 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
             }
             if let Some(t) = task { TaskCard { task: t, expanded: true } }
             nav { class: "tabs",
-                for (t, label, icon) in TABS {
+                for (t, label, icon) in tabs(inst.game) {
                     button { key: "{label}", class: if current == t { "tab active" } else { "tab" }, title: "{label}", onclick: move |_| tab.set(t),
                         Icon { name: icon } span { class: "tab-label", "{label}" }
                     }
@@ -105,9 +118,11 @@ pub fn InstancePage(id: String, nav: Signal<Page>, tick: u64) -> Element {
             match current {
                 Tab::Overview => rsx! { Overview { id: id.clone(), tick, tab } },
                 Tab::Console => rsx! { Console { id: id.clone(), tick } },
+                Tab::Worlds if inst.game == Game::Minecraft => rsx! { super::minecraft::McWorlds { id: id.clone(), tick } },
                 Tab::Worlds => rsx! { Worlds { id: id.clone(), tick } },
                 Tab::Players => rsx! { Players { id: id.clone(), tick } },
                 Tab::Mods => rsx! { Mods { id: id.clone(), tick } },
+                Tab::Properties => rsx! { super::minecraft::McProperties { key: "{id}", id: id.clone(), tick } },
                 Tab::Backups => rsx! { Backups { id: id.clone(), tick } },
                 Tab::Settings => rsx! { InstanceSettings { id: id.clone(), nav, tick } },
             }
@@ -147,12 +162,18 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
     let has_account = crate::account::load(&state).is_some();
     let s_acc = state.clone();
     let (s1, s2, i1, i2) = (state.clone(), state.clone(), id.clone(), id.clone());
-    let worlds = instance::list_worlds(&state, &id).len();
+    let hytale = inst.game == Game::Hytale;
+    let worlds = if hytale { instance::list_worlds(&state, &id).len() } else { crate::minecraft::list_worlds(&state, &id).iter().filter(|w| !w.pending).count() };
     let mods = instance::list_mods(&state, &id).iter().filter(|m| m.enabled).count();
+    let online_mode = if hytale { !inst.offline_auth } else { crate::minecraft::load_properties(&state, &id).get("online-mode") != Some("false") };
+    let connect_hint = match inst.game {
+        Game::Hytale => format!("Friends outside your network need UDP {} forwarded to this computer (Hytale uses QUIC, not TCP).", inst.port),
+        Game::Minecraft => format!("Friends outside your network need TCP {} forwarded to this computer. In Minecraft: Multiplayer → Add Server → this address.", inst.port),
+    };
     let mut tab = tab;
 
     rsx! {
-        if needs_auth && status.is_active() {
+        if hytale && needs_auth && status.is_active() {
             if let Some(url) = auth_url.clone() {
                 LoginCard { title: "Sign this server in to Hytale", url, code: auth_code.clone().unwrap_or_default(),
                     note: "Hytale servers must be signed in before players can join. Open the page, check the code and approve with your Hytale account." }
@@ -174,7 +195,7 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                     }
                 }
             }
-        } else if status.is_active() && !inst.offline_auth {
+        } else if hytale && status.is_active() && !inst.offline_auth {
             div { class: "row end",
                 button { class: "btn sm ghost", title: "Start a new Hytale device sign-in for this server (e.g. to use another account)",
                     onclick: move |_| toast.result(process::start_login(&s2, &i2), "Sign-in started - the code appears here"),
@@ -218,7 +239,7 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                         button { class: "btn sm", disabled: public_addr.is_none(), "data-copy": "{public_addr.clone().unwrap_or_default()}", "Copy" }
                     }
                 }
-                p { class: "muted small center connect-hint", "Friends outside your network need UDP {inst.port} forwarded to this computer (Hytale uses QUIC, not TCP)." }
+                p { class: "muted small center connect-hint", "{connect_hint}" }
             }
             div { class: "panel glass",
                 PanelHead { title: "At a glance", icon: Some("grid") }
@@ -232,8 +253,8 @@ fn Overview(id: String, tick: u64, tab: Signal<Tab>) -> Element {
                     button { class: "glance-tile", onclick: move |_| tab.set(Tab::Players),
                         Icon { name: "shield" } b { "{inst.operators.len()}" } span { "Operators" }
                     }
-                    button { class: "glance-tile", onclick: move |_| tab.set(Tab::Settings),
-                        Icon { name: "key" } b { if inst.offline_auth { "Offline" } else { "Online" } } span { "Auth mode" }
+                    button { class: "glance-tile", onclick: move |_| tab.set(if hytale { Tab::Settings } else { Tab::Properties }),
+                        Icon { name: "key" } b { if online_mode { "Online" } else { "Offline" } } span { if hytale { "Auth mode" } else { "Online mode" } }
                     }
                 }
             }
@@ -282,7 +303,15 @@ fn Console(id: String, tick: u64) -> Element {
         }
     };
     let mut send2 = send.clone();
-    let quick = ["/who", "/save", "/say Hello from the orchestrator!", "/help"];
+    let game = state.instance(&id).map(|i| i.game).unwrap_or_default();
+    let quick: [&str; 4] = match game {
+        Game::Hytale => ["/who", "/save", "/say Hello from the orchestrator!", "/help"],
+        Game::Minecraft => ["list", "save-all", "say Hello from Hyve!", "help"],
+    };
+    let hint = match game {
+        Game::Hytale => "Type a server command, e.g. /op add Steve or /say hi - Enter sends",
+        Game::Minecraft => "Type a server command, e.g. op Steve or say hi - Enter sends",
+    };
 
     rsx! {
         div { class: "panel glass console",
@@ -307,7 +336,7 @@ fn Console(id: String, tick: u64) -> Element {
             div { class: "console-input",
                 span { class: "prompt", ">" }
                 input { class: "input grow mono", disabled: !running,
-                    placeholder: if running { "Type a server command, e.g. /op add Steve or /say hi - Enter sends" } else { "Start the server to use its console" },
+                    placeholder: if running { hint } else { "Start the server to use its console" },
                     value: "{input}",
                     oninput: move |e| input.set(e.value()),
                     onkeydown: move |e: KeyboardEvent| if e.key() == Key::Enter { send(input()) },
@@ -426,7 +455,7 @@ fn Players(id: String, tick: u64) -> Element {
                                         button { class: "btn sm", onclick: move |_| toast.result(process::set_operator(&s2, &i2, &p2, true), "Operator added"), Icon { name: "shield" } "Make OP" }
                                     }
                                     ConfirmButton { label: "Kick", confirm: "Kick?", class: "sm ghost", disabled: false,
-                                        onconfirm: move |_| toast.result(process::send_command(&s3, &i3, &format!("/kick {p3}")), "")
+                                        onconfirm: move |_| toast.result(process::send_command(&s3, &i3, &format!("kick {p3}")), "")
                                     }
                                 }
                             }
@@ -436,7 +465,13 @@ fn Players(id: String, tick: u64) -> Element {
             }
             div { class: "panel glass",
                 h3 { "Operators" }
-                p { class: "muted small", "Operators can use admin commands in game. Changes go through the server console (/op add, /op remove), so the server must be running. Use a UUID for players who are offline." }
+                p { class: "muted small",
+                    if inst.game == Game::Hytale {
+                        "Operators can use admin commands in game. Changes go through the server console (/op add, /op remove), so the server must be running. Use a UUID for players who are offline."
+                    } else {
+                        "Operators can use admin commands in game. Changes go through the server console (op, deop), so the server must be running. The server keeps them in ops.json."
+                    }
+                }
                 div { class: "row",
                     input { class: "input grow", placeholder: "Player name or UUID", value: "{name}", oninput: move |e| name.set(e.value()), disabled: !running }
                     button { class: "btn primary", disabled: !running,
@@ -476,8 +511,23 @@ fn Mods(id: String, tick: u64) -> Element {
     let running = state.status(&id).is_active();
     let desktop = state.mode == Mode::Desktop;
     let mods_dir = state.paths.server_dir(&id).join("mods");
+    let Some(inst) = state.instance(&id) else { return rsx! {} };
+    let mc = inst.game == Game::Minecraft;
+    let empty_text = if mc {
+        format!("No mods yet. Get {} mods for Minecraft {} (Modrinth, CurseForge) and drop them above.", inst.loader.label(), inst.version)
+    } else {
+        "No mods yet. Find Hytale mods on CurseForge and drop them above.".to_string()
+    };
+    if mc && !inst.loader.has_mods() {
+        return rsx! {
+            Empty { icon: "box", title: "Vanilla servers don't load mods",
+                text: "Switch this server to Fabric, Quilt, Forge or NeoForge in Settings → Server software (worlds are kept, a backup is made first). Data packs go into the world's datapacks folder."
+            }
+        };
+    }
 
     rsx! {
+        if mc { Banner { kind: "info", icon: "info", "Mods must be made for {inst.loader.label()} and Minecraft {inst.version}. Most also need to be installed on every player's game." } }
         div { class: "dropzone glass", "data-dropzone": "mods", "data-instance": "{id}",
             Icon { name: "upload" }
             div {
@@ -494,7 +544,7 @@ fn Mods(id: String, tick: u64) -> Element {
                     button { class: "btn sm ghost", onclick: move |_| { let _ = open::that_detached(&mods_dir); }, Icon { name: "folder" } "Open folder" }
                 }
             }
-            if mods.is_empty() { p { class: "muted", "No mods yet. Find Hytale mods on CurseForge and drop them above." } }
+            if mods.is_empty() { p { class: "muted", "{empty_text}" } }
             table { class: "table",
                 tbody {
                     for m in mods {
@@ -537,11 +587,15 @@ fn Backups(id: String, tick: u64) -> Element {
     let desktop = state.mode == Mode::Desktop;
     let dir = state.paths.backup_dir(&id);
     let (s1, i1) = (state.clone(), id.clone());
+    let backup_text = match state.instance(&id).map(|i| i.game).unwrap_or_default() {
+        Game::Hytale => "Packs universe/ (all worlds and player data), mods/ and the server's config, permissions, whitelist and bans into one zip. Updates and restores make one automatically first.",
+        Game::Minecraft => "Packs every world folder, mods/, config/, server.properties and the player lists (ops, whitelist, bans) into one zip. Updates and restores make one automatically first.",
+    };
 
     rsx! {
         div { class: "panel glass",
             h3 { "Back up world + mods" }
-            p { class: "muted small", "Packs universe/ (all worlds and player data), mods/ and the server's config, permissions, whitelist and bans into one zip. Updates and restores make one automatically first." }
+            p { class: "muted small", "{backup_text}" }
             div { class: "row",
                 input { class: "input grow", placeholder: "Label (optional), e.g. before the castle", value: "{label}", oninput: move |e| label.set(e.value()) }
                 button { class: "btn primary", disabled: busy,
@@ -602,13 +656,21 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
     let desktop = state.mode == Mode::Desktop;
     let dir = state.paths.server_dir(&id);
     let mems = [1024u32, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768];
+    let hytale = inst.game == Game::Hytale;
+    let java_hint = if hytale {
+        "the Java 25 from Settings".to_string()
+    } else if inst.java_major > 0 {
+        format!("a Java {} Hyve picks or installs", inst.java_major)
+    } else {
+        "picked by Hyve".to_string()
+    };
 
     rsx! {
         div { class: "grid2",
             div { class: "panel glass form",
                 h3 { "Server" }
                 label { class: "field", span { "Name" } input { class: "input", value: "{f.name}", oninput: move |e| form.write().name = e.value() } }
-                label { class: "field", span { "UDP port" }
+                label { class: "field", span { "{inst.game.protocol()} port" }
                     input { class: "input", r#type: "number", min: "1", max: "65535", value: "{f.port}", oninput: move |e| if let Ok(p) = e.value().parse() { form.write().port = p } }
                 }
                 div { class: "row",
@@ -623,17 +685,24 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                         }
                     }
                 }
-                label { class: "field", span { "Update channel" }
-                    select { class: "input", onchange: move |e| form.write().patchline = e.value(),
-                        for p in crate::versions::PATCHLINES { option { key: "{p}", value: "{p}", selected: f.patchline == p, "{p}" } }
+                if hytale {
+                    label { class: "field", span { "Update channel" }
+                        select { class: "input", onchange: move |e| form.write().patchline = e.value(),
+                            for p in crate::versions::PATCHLINES { option { key: "{p}", value: "{p}", selected: f.patchline == p, "{p}" } }
+                        }
                     }
+                    Check { label: "Offline auth mode (--auth-mode offline, for LAN tests)", checked: f.offline_auth, onchange: move |v| form.write().offline_auth = v }
+                    Check { label: "Use the AOT cache for faster starts (HytaleServer.aot)", checked: f.use_aot, onchange: move |v| form.write().use_aot = v }
+                    Check { label: "Disable Sentry crash reports (--disable-sentry, for mod development)", checked: f.disable_sentry, onchange: move |v| form.write().disable_sentry = v }
                 }
-                Check { label: "Offline auth mode (--auth-mode offline, for LAN tests)", checked: f.offline_auth, onchange: move |v| form.write().offline_auth = v }
-                Check { label: "Use the AOT cache for faster starts (HytaleServer.aot)", checked: f.use_aot, onchange: move |v| form.write().use_aot = v }
-                Check { label: "Disable Sentry crash reports (--disable-sentry, for mod development)", checked: f.disable_sentry, onchange: move |v| form.write().disable_sentry = v }
                 Check { label: "Restart automatically after a crash", checked: f.auto_restart, onchange: move |v| form.write().auto_restart = v }
                 label { class: "field", span { "Extra JVM arguments" } input { class: "input mono", placeholder: "-XX:+UseG1GC", value: "{f.jvm_args}", oninput: move |e| form.write().jvm_args = e.value() } }
-                label { class: "field", span { "Extra server arguments" } input { class: "input mono", placeholder: "--backup --backup-frequency 30", value: "{f.server_args}", oninput: move |e| form.write().server_args = e.value() } }
+                label { class: "field", span { "Extra server arguments" }
+                    input { class: "input mono", placeholder: if hytale { "--backup --backup-frequency 30" } else { "--forceUpgrade" }, value: "{f.server_args}", oninput: move |e| form.write().server_args = e.value() }
+                }
+                label { class: "field", span { "Java for this server (blank = automatic)" }
+                    input { class: "input mono", placeholder: "{java_hint}", value: "{f.java_path}", oninput: move |e| form.write().java_path = e.value() }
+                }
                 div { class: "row",
                     button { class: "btn primary",
                         onclick: move |_| {
@@ -647,6 +716,7 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                                     i.name = f.name.clone(); i.port = f.port; i.min_memory_mb = f.min_memory_mb; i.max_memory_mb = f.max_memory_mb;
                                     i.patchline = f.patchline.clone(); i.offline_auth = f.offline_auth; i.use_aot = f.use_aot;
                                     i.disable_sentry = f.disable_sentry; i.auto_restart = f.auto_restart; i.jvm_args = f.jvm_args.clone(); i.server_args = f.server_args.clone();
+                                    i.java_path = f.java_path.trim().to_string();
                                 })
                             })();
                             toast.result(r, if running { "Saved - restart the server to apply" } else { "Saved" });
@@ -657,7 +727,8 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                 }
             }
             div { class: "col",
-                div { class: "panel glass",
+                if !hytale { super::minecraft::McSoftware { id: id.clone(), tick } }
+                if hytale { div { class: "panel glass",
                     h3 { "Server version" }
                     p { class: "muted small", "Switch to any version in the cache (newer or older). A backup is made first; a running server is restarted." }
                     div { class: "row",
@@ -671,7 +742,7 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                             "Switch"
                         }
                     }
-                }
+                } }
                 div { class: "panel glass danger-zone",
                     h3 { "Delete instance" }
                     p { class: "muted small", "Deletes the server folder: worlds, mods and configs. Backups are kept unless you tick the box." }

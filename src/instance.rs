@@ -1,6 +1,7 @@
-//! Server instances: creation, settings, worlds (with seeds), mods and the version files.
+//! Server instances: creation, settings, worlds (with seeds), mods and the version files. Minecraft-specific
+//! files (server.properties, loaders, worlds) are in `minecraft.rs`.
 //!
-//! Layout of one instance (`data/instances/<id>/server`, the server's working directory, like the
+//! Layout of one Hytale instance (`data/instances/<id>/server`, the server's working directory, like the
 //! official `Server/` folder):
 //! ```text
 //! HytaleServer.jar, HytaleServer.aot, Licenses/   copied from versions/<version>/Server
@@ -15,7 +16,7 @@ use base64::Engine;
 use serde::Serialize;
 use std::path::PathBuf;
 
-use crate::state::{DEFAULT_GAME_PORT, InstanceConfig, Shared, now_ms};
+use crate::state::{Game, InstanceConfig, Loader, Shared, now_ms};
 use crate::versions;
 
 /// Files and folders that make up "world + mods" (backups, restores).
@@ -77,10 +78,85 @@ pub fn random_seed() -> i64 {
     i64::from_le_bytes(b[..8].try_into().unwrap()).abs() % 10_000_000_000_000
 }
 
-/// First free game port from 5520 that no other instance uses.
-pub fn suggest_port(state: &Shared) -> u16 {
+/// First free game port from the game's default (5520 / 25565) that no other instance uses.
+pub fn suggest_port(state: &Shared, game: Game) -> u16 {
     let used: Vec<u16> = state.instances.read().iter().map(|i| i.port).collect();
-    (DEFAULT_GAME_PORT..DEFAULT_GAME_PORT + 200).find(|p| !used.contains(p)).unwrap_or(DEFAULT_GAME_PORT)
+    let base = game.default_port();
+    (base..base + 200).find(|p| !used.contains(p)).unwrap_or(base)
+}
+
+/// "Minecraft 1.21.4 · Fabric 0.16.9", "Hytale 2026.01.22-…"
+pub fn software_label(inst: &InstanceConfig) -> String {
+    match inst.game {
+        Game::Hytale => format!("Hytale {}", inst.version),
+        Game::Minecraft if inst.loader == Loader::Vanilla => format!("Minecraft {}", inst.version),
+        Game::Minecraft => format!("Minecraft {} · {} {}", inst.version, inst.loader.label(), inst.loader_version).trim_end().to_string(),
+    }
+}
+
+/// Files and folders of the instance that make up "world + mods" (backups and restores).
+pub fn data_items(state: &Shared, id: &str) -> Vec<String> {
+    match state.instance(id).map(|i| i.game).unwrap_or_default() {
+        Game::Hytale => DATA_ITEMS.iter().map(|s| s.to_string()).collect(),
+        Game::Minecraft => crate::minecraft::data_items(&state.paths.server_dir(id)),
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct NewMinecraft {
+    pub name: String,
+    pub version: String,
+    pub loader: Loader,
+    /// blank = the recommended / latest build
+    pub loader_version: String,
+    pub port: u16,
+    pub max_memory_mb: u32,
+    pub eula: bool,
+    pub world: crate::minecraft::WorldSetup,
+}
+
+/// Registers a Minecraft instance and writes its first server.properties + eula.txt. The server software
+/// is installed by a task (`actions::install_minecraft`).
+pub fn create_minecraft(state: &Shared, req: NewMinecraft) -> Result<InstanceConfig> {
+    let name = validate_name(&req.name)?;
+    if req.version.trim().is_empty() {
+        bail!("pick a Minecraft version");
+    }
+    if !req.eula {
+        bail!("Minecraft servers only run after you accept Mojang's EULA");
+    }
+    if req.port == 0 {
+        bail!("pick a port between 1 and 65535");
+    }
+    if let Some(other) = port_conflict(state, "", req.port) {
+        bail!("port {} is already used by \"{other}\"", req.port);
+    }
+    let inst = InstanceConfig {
+        id: crate::state::new_id(),
+        name,
+        game: Game::Minecraft,
+        version: req.version.trim().to_string(),
+        loader: req.loader,
+        loader_version: req.loader_version.trim().to_string(),
+        port: req.port,
+        max_memory_mb: req.max_memory_mb.max(1024),
+        min_memory_mb: 1024,
+        offline_auth: !req.world.online_mode,
+        use_aot: false,
+        created_at: now_ms(),
+        ..Default::default()
+    };
+    let dir = state.paths.server_dir(&inst.id);
+    std::fs::create_dir_all(&dir)?;
+    if inst.loader.has_mods() {
+        std::fs::create_dir_all(dir.join("mods"))?;
+    }
+    crate::minecraft::write_initial_properties(&dir, &inst.version, inst.port, &req.world)?;
+    crate::minecraft::accept_eula(&dir)?;
+    state.instances.write().push(inst.clone());
+    state.save_instances()?;
+    state.notify();
+    Ok(inst)
 }
 
 pub fn port_conflict(state: &Shared, id: &str, port: u16) -> Option<String> {

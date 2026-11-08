@@ -427,7 +427,29 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
 .action-bar .btn.primary { background: linear-gradient(135deg, #8b5cf6, #6d28d9); border-color: rgba(167, 139, 250, 0.6); }
 
 /* tabs: full width, equal segments */
-.tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 4px; overflow: visible; }
+.tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 4px; overflow: visible; }
+.tabs.game-pick { margin-bottom: var(--gap); }
+.tabs.game-pick .tab-label, .tabs.game-pick span { display: inline; }
+
+/* Minecraft server.properties editor */
+.props-bar { position: sticky; top: 0; z-index: 5; }
+.props-bar .row { flex-wrap: nowrap; }
+.props-bar p { margin: 2px 0 0; }
+.props-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
+.prop { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.prop-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.prop-text b { font-size: 13.5px; font-weight: 600; }
+.prop-text small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.prop-key { font-family: var(--mono); font-size: 11px; color: var(--muted); opacity: .75; }
+.prop .input { width: 190px; flex: none; }
+.prop.changed .prop-text b::after { content: " •"; color: var(--violet2); }
+.add-prop { margin-top: 14px; flex-wrap: nowrap; }
+@media (max-width: 1000px) { .props-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .prop { flex-wrap: wrap; }
+  .prop .input { width: 100%; }
+  .props-bar .row, .add-prop { flex-wrap: wrap; }
+}
 .tab { justify-content: center; padding: 9px 8px; min-height: 38px; }
 .tab-label { overflow: hidden; text-overflow: ellipsis; }
 

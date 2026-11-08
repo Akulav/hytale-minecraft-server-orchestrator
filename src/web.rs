@@ -169,7 +169,7 @@ async fn status(State(web): State<Web>) -> impl IntoResponse {
             let rt = st.runtimes.read();
             let r = rt.get(&i.id);
             serde_json::json!({
-                "id": i.id, "name": i.name, "version": i.version, "port": i.port,
+                "id": i.id, "name": i.name, "game": i.game, "version": i.version, "loader": i.loader, "loader_version": i.loader_version, "port": i.port,
                 "status": r.map(|r| r.status).unwrap_or_default(),
                 "players": r.map(|r| r.players.iter().cloned().collect::<Vec<_>>()).unwrap_or_default(),
                 "cpu": r.map(|r| r.cpu).unwrap_or(0.0),

@@ -5,6 +5,36 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-08
+### Added
+- **Minecraft (Java Edition) servers**, next to Hytale ones: New instance → **Minecraft**. Any release (or snapshot),
+  as **vanilla, Fabric, Quilt, Forge or NeoForge** - the newest stable / recommended build, or the one you type.
+  Hyve downloads Mojang's server (SHA-1 checked), runs the loader's installer, and installs the Java the version
+  needs by itself (Temurin 8 / 17 / 21 / 25; Forge and NeoForge get exactly theirs). EULA acceptance is asked once.
+- **Properties tab** (Minecraft): every `server.properties` setting as a switch, menu or number - online mode, game
+  mode, difficulty, hardcore, PvP, whitelist, max players, MOTD, world type, seed, view / simulation distance, RCON,
+  … - plus any other key; saved in place (comments and order kept). Online mode also shows on the Overview.
+- Minecraft **Worlds** (switch the active world, generate a new one with a seed and world type, delete), **mods**
+  (drag & drop for the loader; vanilla explains how to switch), **operators** (`op` / `deop`), console quick
+  commands, **backups** (worlds, mods, config, player lists; `save-all flush` first), **1-click Update** (modded:
+  newest loader build for the same version; vanilla: newest release) and **Settings → Server software** to switch
+  version or loader with a backup first. Server versions lists the cached Mojang jars.
+- Per-instance Java path (Settings), for Hytale and Minecraft.
+- Linux and macOS **install themselves**: run the downloaded program and the dashboard offers to install it for your
+  user (Linux: `~/.local/share/Hyve` with an app menu entry, icon and `~/.local/bin/hyve`; macOS:
+  `~/Applications/Hyve.app`), or to update an older installed copy. `--install` and `--uninstall [--delete-data]`
+  do the same from a terminal.
+
+### Changed
+- **Releases have exactly three programs**, one per system, each the same file for the first install and for updates:
+  `Hyve-setup.exe`, `hyve-linux-x64`, `hyve-macos-arm64` (+ `SHA256SUMS.txt`). The macOS `.dmg`, the Linux
+  `-headless` build and the copies under the pre-0.4 HyOrchestrator names are gone: those older copies need one
+  manual download of the new file (it then updates itself as before).
+- Linux no longer needs GTK / WebKit: one binary runs on desktops and servers. With a display the UI opens as a
+  Chrome / Chromium / Edge / Brave **app window** (closing it quits Hyve), else in the default browser with a
+  **Quit Hyve** button in the sidebar; without a display it runs headless as before.
+- Backups skip lock files a running server holds (Minecraft's `session.lock`) and never leave a half-written zip.
+
 ## [0.4.0] - 2026-11-07
 ### Changed
 - **HyOrchestrator is now Hyve.** New program and release file names (`hyve.exe`, `Hyve-setup.exe`,

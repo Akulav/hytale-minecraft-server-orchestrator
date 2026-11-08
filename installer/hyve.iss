@@ -19,7 +19,7 @@
 
 #ifndef AppVersion
   ; scripts\bump-version.ps1 keeps this in sync with Cargo.toml
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.5.0"
 #endif
 #ifndef Exe
   #define Exe "..\target\release\hyve.exe"
@@ -79,7 +79,7 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-AppComment=Run and manage Hytale servers - made by Akulav
+AppComment=Run and manage Hytale and Minecraft servers - made by Akulav
 DeleteData=Hyve is uninstalled.%n%nAlso delete its data in %1 ?%nThat deletes every server instance, world, mod, downloaded server version and backup for good.%n%nNo keeps them: installing Hyve again brings everything back.
 
 [Tasks]

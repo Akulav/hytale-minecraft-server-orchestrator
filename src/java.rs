@@ -1,11 +1,12 @@
-//! Java 25 for the Hytale server: finds a usable `java` (the setting, the managed copy in
-//! `data/java`, JAVA_HOME, PATH) and can install Eclipse Temurin 25 from the Adoptium API.
+//! Java for the servers: Hytale needs Java 25 - found as the setting, the managed copy in `data/java`,
+//! JAVA_HOME or PATH. Minecraft servers need the Java of their version (`data/java-<major>` for others).
+//! Eclipse Temurin is installed from the Adoptium API.
 
 use anyhow::{Context, Result, anyhow, bail};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use crate::state::{JavaInfo, Shared};
+use crate::state::{InstanceConfig, JavaInfo, Loader, Shared};
 
 pub const REQUIRED_MAJOR: u32 = 25;
 
@@ -133,15 +134,90 @@ fn adoptium_os_arch() -> Result<(&'static str, &'static str, &'static str)> {
     Ok((os, arch, ext))
 }
 
+/// Where Hyve keeps its own Temurin of a major version: `data/java` (25, Hytale's) or `data/java-<major>`.
+pub fn managed_dir(state: &Shared, major: u32) -> PathBuf {
+    if major == REQUIRED_MAJOR { state.paths.java.clone() } else { state.paths.root.join(format!("java-{major}")) }
+}
+
+/// Minecraft servers on Forge / NeoForge, and very old versions, want exactly the Java their version was
+/// made for; vanilla, Fabric and Quilt run fine on anything newer.
+fn exact_major(inst: &InstanceConfig) -> Option<u32> {
+    let m = inst.java_major;
+    (m > 0 && (matches!(inst.loader, Loader::Forge | Loader::NeoForge) || m < 17)).then_some(m)
+}
+
+pub enum McJava {
+    Ready(PathBuf),
+    /// Java `n` is needed and not installed
+    Missing(u32),
+}
+
+/// The `java` for a Minecraft server: its own setting, else a Java of the right version (Hyve's own
+/// copy of that version, the global setting, JAVA_HOME, PATH).
+pub async fn pick_minecraft(state: &Shared, inst: &InstanceConfig) -> McJava {
+    if !inst.java_path.trim().is_empty() {
+        return McJava::Ready(PathBuf::from(inst.java_path.trim()));
+    }
+    let need = inst.java_major.max(8);
+    let exact = exact_major(inst);
+    let mut list = vec![];
+    if let Some(m) = find_java_in(&managed_dir(state, need)) {
+        list.push(m);
+    }
+    list.extend(candidates(state));
+    for c in list {
+        if let Ok((_, major)) = probe(&c).await
+            && (major == need || (exact.is_none() && major >= need))
+        {
+            return McJava::Ready(c);
+        }
+    }
+    // the newest supported Java for versions that run on anything newer
+    McJava::Missing(exact.unwrap_or(need.max(REQUIRED_MAJOR)))
+}
+
+/// `pick_minecraft`, installing the missing Java first (inside a task).
+pub async fn ensure_for_minecraft(state: &Shared, task: &str, inst: &InstanceConfig) -> Result<PathBuf> {
+    match pick_minecraft(state, inst).await {
+        McJava::Ready(p) => Ok(p),
+        McJava::Missing(major) => {
+            state.task_update(task, Some(&format!("Installing Java {major} for this server…")), None);
+            install_major(state, task, major).await?;
+            match pick_minecraft(state, inst).await {
+                McJava::Ready(p) => Ok(p),
+                McJava::Missing(m) => bail!("Java {m} was installed but does not run"),
+            }
+        }
+    }
+}
+
 /// Downloads Eclipse Temurin 25 (JRE) into `data/java` and selects it.
 pub async fn install_temurin(state: Shared, task: String) -> Result<String> {
+    install_major(&state, &task, REQUIRED_MAJOR).await?;
+    let java = find_java_in(&state.paths.java).ok_or_else(|| anyhow!("the download has no bin/java"))?;
+    // the managed copy is picked automatically when no explicit path is set
+    let info = detect(&state).await;
+    if info.major < REQUIRED_MAJOR {
+        bail!("installed {} but it does not run: {}", java.display(), info.error);
+    }
+    Ok(format!("Java ready: {}", info.version))
+}
+
+/// Task: installs Temurin `major` (for a Minecraft server that needs it).
+pub async fn install_major_task(state: Shared, task: String, major: u32) -> Result<String> {
+    install_major(&state, &task, major).await?;
+    Ok(format!("Java {major} is installed"))
+}
+
+/// Downloads Eclipse Temurin `major` (JRE) into `managed_dir(major)`.
+pub async fn install_major(state: &Shared, task: &str, major: u32) -> Result<PathBuf> {
     let (os, arch, ext) = adoptium_os_arch()?;
-    let url = format!("https://api.adoptium.net/v3/binary/latest/{REQUIRED_MAJOR}/ga/{os}/{arch}/jre/hotspot/normal/eclipse");
-    state.task_log(&task, format!("Downloading Temurin {REQUIRED_MAJOR} JRE from {url}"));
-    let archive = state.paths.tmp.join(format!("temurin-{REQUIRED_MAJOR}.{ext}"));
-    crate::download::to_file(&state, &task, &url, &archive).await?;
-    state.task_update(&task, Some("Extracting…"), None);
-    let target = state.paths.java.clone();
+    let url = format!("https://api.adoptium.net/v3/binary/latest/{major}/ga/{os}/{arch}/jre/hotspot/normal/eclipse");
+    state.task_log(task, format!("Downloading Temurin {major} JRE from {url}"));
+    let archive = state.paths.tmp.join(format!("temurin-{major}.{ext}"));
+    crate::download::to_file(state, task, &url, &archive).await?;
+    state.task_update(task, Some("Extracting…"), None);
+    let target = managed_dir(state, major);
     let a2 = archive.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
         if target.exists() {
@@ -158,13 +234,7 @@ pub async fn install_temurin(state: Shared, task: String) -> Result<String> {
     })
     .await??;
     let _ = std::fs::remove_file(&archive);
-    let java = find_java_in(&state.paths.java).ok_or_else(|| anyhow!("the download has no bin/java"))?;
-    // the managed copy is picked automatically when no explicit path is set
-    let info = detect(&state).await;
-    if info.major < REQUIRED_MAJOR {
-        bail!("installed {} but it does not run: {}", java.display(), info.error);
-    }
-    Ok(format!("Java ready: {}", info.version))
+    find_java_in(&managed_dir(state, major)).ok_or_else(|| anyhow!("the download has no bin/java"))
 }
 
 #[cfg(test)]

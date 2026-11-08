@@ -5,6 +5,7 @@
 mod create;
 mod dashboard;
 mod instance;
+mod minecraft;
 mod settings;
 mod versions;
 mod widgets;
@@ -162,6 +163,7 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
     let create_class = format!("{} add", item(Page::Create));
     let first_url = urls.first().cloned().unwrap_or_default();
     let net_url = urls.get(1).cloned();
+    let st_quit = state.clone();
 
     rsx! {
         aside { class: "sidebar glass",
@@ -169,7 +171,7 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
                 img { src: "/assets/logo.svg", width: "36", height: "36", alt: "" }
                 div {
                     div { class: "brand-name", "Hyve" }
-                    div { class: "brand-sub", "Hytale server orchestrator" }
+                    div { class: "brand-sub", "Hytale & Minecraft servers" }
                 }
             }
             nav { class: "nav",
@@ -217,6 +219,12 @@ fn Sidebar(nav: Signal<Page>, tick: u64) -> Element {
                     }
                 } else if let Some(u) = net_url {
                     div { class: "web-link static", title: "{u}", Icon { name: "link" } "Web UI on the network" }
+                }
+                if desktop && crate::browser::in_use() {
+                    button { class: "web-link", title: "Stop the servers and end Hyve",
+                        onclick: move |_| st_quit.request_quit(),
+                        Icon { name: "stop" } "Quit Hyve"
+                    }
                 }
                 div { class: "made-by", "v{VERSION} · Made by Akulav" }
             }

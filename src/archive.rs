@@ -52,7 +52,26 @@ pub fn zip_paths(base: &Path, items: &[&str], zip_path: &Path) -> Result<usize> 
         std::fs::create_dir_all(p)?;
     }
     let part = zip_path.with_extension("zip.part");
-    let file = File::create(&part)?;
+    let result = zip_into(base, items, &part);
+    match result {
+        Ok(n) => {
+            std::fs::rename(&part, zip_path)?;
+            Ok(n)
+        }
+        Err(e) => {
+            let _ = std::fs::remove_file(&part);
+            Err(e)
+        }
+    }
+}
+
+/// Lock files a running server holds open (Minecraft's `session.lock`): never needed in a backup.
+fn skip_in_backup(path: &Path) -> bool {
+    path.file_name().is_some_and(|n| n == "session.lock")
+}
+
+fn zip_into(base: &Path, items: &[&str], part: &Path) -> Result<usize> {
+    let file = File::create(part)?;
     let mut zw = zip::ZipWriter::new(file);
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated).large_file(true);
     let mut count = 0usize;
@@ -62,7 +81,7 @@ pub fn zip_paths(base: &Path, items: &[&str], zip_path: &Path) -> Result<usize> 
             add_file(&mut zw, &path, item, opts)?;
             count += 1;
         } else if path.is_dir() {
-            for f in walk_files(&path) {
+            for f in walk_files(&path).into_iter().filter(|f| !skip_in_backup(f)) {
                 let rel = f.strip_prefix(base).unwrap_or(&f);
                 let name = rel.to_string_lossy().replace('\\', "/");
                 add_file(&mut zw, &f, &name, opts)?;
@@ -72,7 +91,6 @@ pub fn zip_paths(base: &Path, items: &[&str], zip_path: &Path) -> Result<usize> 
         }
     }
     zw.finish()?;
-    std::fs::rename(&part, zip_path)?;
     Ok(count)
 }
 
@@ -152,9 +170,11 @@ mod tests {
         std::fs::create_dir_all(src.join("mods")).unwrap();
         std::fs::write(src.join("mods/a.jar"), b"jar").unwrap();
         std::fs::write(src.join("config.json"), b"{}").unwrap();
+        std::fs::write(src.join("universe/session.lock"), b"x").unwrap();
         let z = root.join("b.zip");
         let n = zip_paths(&src, &["universe", "mods", "config.json", "missing.json"], &z).unwrap();
         assert_eq!(n, 3);
+        assert!(!z.with_extension("zip.part").exists());
         let out = root.join("out");
         let mut last = 0.0;
         extract_zip(&z, &out, |p| last = p).unwrap();

@@ -1,7 +1,8 @@
-//! Hyve - run and manage Hytale servers from one place. Made by Akulav.
+//! Hyve - run and manage Hytale and Minecraft servers from one place. Made by Akulav.
 //!
-//! One program, two faces: with a display it opens a desktop window; without one (a Linux server over
-//! SSH, `--headless`) it serves the same UI on a local web server and prints where to open it.
+//! One program, two faces: with a display it opens a desktop window (native on Windows / macOS, a browser
+//! app window on Linux); without one (a Linux server over SSH, `--headless`) it serves the same UI on a
+//! local web server and prints where to open it.
 
 #![cfg_attr(all(windows, feature = "desktop", not(debug_assertions)), windows_subsystem = "windows")]
 
@@ -9,14 +10,18 @@ mod account;
 mod actions;
 mod archive;
 mod backup;
-#[cfg(feature = "desktop")]
+mod browser;
+#[cfg(native_window)]
 mod desktop;
 mod download;
 mod instance;
 mod java;
 mod login;
+mod mcprops;
+mod minecraft;
 mod net;
 mod process;
+mod selfinstall;
 mod state;
 mod telemetry;
 mod ui;
@@ -31,7 +36,7 @@ use std::sync::OnceLock;
 
 use state::{AppState, Mode, Paths, Shared, VERSION};
 
-const HELP: &str = "Hyve - run and manage Hytale servers. Made by Akulav.
+const HELP: &str = "Hyve - run and manage Hytale and Minecraft servers. Made by Akulav.
 
 Usage: hyve [options]
 
@@ -41,6 +46,8 @@ Usage: hyve [options]
   --host <ip>         address the web UI listens on (headless default 0.0.0.0, desktop 127.0.0.1)
   --data-dir <path>   where instances, versions and backups live
   --print-url         print the web UI address (with its access token) and quit
+  --install           Linux / macOS: install this program for your user, then quit
+  --uninstall         Linux / macOS: remove the installed program (add --delete-data to remove the data too)
   --version           print the version and quit
   --help              this text
 ";
@@ -53,6 +60,9 @@ struct Args {
     host: Option<IpAddr>,
     data_dir: Option<PathBuf>,
     print_url: bool,
+    install: bool,
+    uninstall: bool,
+    delete_data: bool,
     version: bool,
     help: bool,
 }
@@ -69,6 +79,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--host" => a.host = Some(value("--host")?.parse().map_err(|_| "--host needs an IP address".to_string())?),
             "--data-dir" => a.data_dir = Some(PathBuf::from(value("--data-dir")?)),
             "--print-url" => a.print_url = true,
+            "--install" => a.install = true,
+            "--uninstall" => a.uninstall = true,
+            "--delete-data" => a.delete_data = true,
             "--version" | "-V" => a.version = true,
             "--help" | "-h" => a.help = true,
             "--after-update" => {}
@@ -91,7 +104,7 @@ fn has_display() -> bool {
 }
 
 fn pick_mode(args: &Args) -> Mode {
-    if !cfg!(feature = "desktop") || args.headless || args.print_url {
+    if args.headless || args.print_url || args.install || args.uninstall {
         Mode::Headless
     } else if args.desktop || has_display() {
         Mode::Desktop
@@ -187,6 +200,17 @@ fn main() {
         println!("hyve {VERSION}");
         return;
     }
+    if args.install || args.uninstall {
+        let r = if args.install { selfinstall::install_cli() } else { selfinstall::uninstall_cli(args.delete_data) };
+        match r {
+            Ok(msg) => println!("{msg}"),
+            Err(e) => {
+                eprintln!("{e:#}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
 
     let (root, data_note) = match args.data_dir.clone() {
         Some(d) => (d, None),
@@ -245,16 +269,29 @@ fn main() {
         });
     }
 
+    if mode == Mode::Desktop {
+        // Linux / macOS copies run from Downloads offer to install themselves (dashboard banner)
+        let st = state.clone();
+        runtime.spawn_blocking(move || {
+            *st.install_offer.write() = selfinstall::check();
+            st.notify();
+        });
+    }
+
+    let url = format!("http://127.0.0.1:{}/?token={token}", addr.port());
     match mode {
-        #[cfg(feature = "desktop")]
+        #[cfg(native_window)]
         Mode::Desktop => {
-            let url = format!("http://127.0.0.1:{}/?token={token}", addr.port());
             // the runtime keeps running on its worker threads while the window owns the main thread
             let _guard = runtime.enter();
             desktop::run(state, url);
         }
         _ => {
-            banner(&state);
+            if mode == Mode::Desktop {
+                browser::open(&state, &url);
+            } else {
+                banner(&state);
+            }
             runtime.block_on(async {
                 let st = state.clone();
                 tokio::select! {
@@ -304,15 +341,16 @@ mod tests {
         assert!(parse_args(&s(&["--port"])).is_err());
         assert!(parse_args(&s(&["--bogus"])).is_err());
         assert_eq!(parse_args(&s(&["--after-update"])).unwrap(), Args::default());
+        let u = parse_args(&s(&["--uninstall", "--delete-data"])).unwrap();
+        assert!(u.uninstall && u.delete_data && !u.install);
     }
 
     #[test]
     fn headless_flag_wins() {
         let a = Args { headless: true, desktop: true, ..Default::default() };
         assert_eq!(pick_mode(&a), Mode::Headless);
-        if !cfg!(feature = "desktop") {
-            assert_eq!(pick_mode(&Args::default()), Mode::Headless);
-        }
+        assert_eq!(pick_mode(&Args { install: true, desktop: true, ..Default::default() }), Mode::Headless);
+        assert_eq!(pick_mode(&Args { desktop: true, ..Default::default() }), Mode::Desktop);
     }
 
     #[test]

@@ -17,6 +17,8 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USER_AGENT: &str = concat!("Hyve/", env!("CARGO_PKG_VERSION"), " (+https://github.com/Akulav/hytale-server-orchestrator)");
 /// Default Hytale server port (UDP, QUIC).
 pub const DEFAULT_GAME_PORT: u16 = 5520;
+/// Default Minecraft (Java Edition) server port (TCP).
+pub const DEFAULT_MC_PORT: u16 = 25565;
 /// Default port of the orchestrator's own web UI.
 pub const DEFAULT_WEB_PORT: u16 = 7520;
 /// Lines of console output kept in memory per instance.
@@ -52,11 +54,14 @@ pub struct Paths {
     pub logs: PathBuf,
     pub tmp: PathBuf,
     pub updates: PathBuf,
+    /// Minecraft downloads: vanilla server jars by version (`minecraft/vanilla/<version>/server.jar`).
+    pub minecraft: PathBuf,
 }
 
 impl Paths {
     pub fn new(root: PathBuf) -> Self {
         Self {
+            minecraft: root.join("minecraft"),
             instances: root.join("instances"),
             versions: root.join("versions"),
             backups: root.join("backups"),
@@ -205,13 +210,96 @@ impl Default for Settings {
     }
 }
 
+/// Which game an instance runs. Instances from before Minecraft support have no `game` field: Hytale.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Game {
+    #[default]
+    Hytale,
+    Minecraft,
+}
+
+impl Game {
+    pub fn label(self) -> &'static str {
+        match self {
+            Game::Hytale => "Hytale",
+            Game::Minecraft => "Minecraft",
+        }
+    }
+    pub fn default_port(self) -> u16 {
+        match self {
+            Game::Hytale => DEFAULT_GAME_PORT,
+            Game::Minecraft => DEFAULT_MC_PORT,
+        }
+    }
+    /// Hytale talks QUIC over UDP, Minecraft Java plain TCP.
+    pub fn protocol(self) -> &'static str {
+        match self {
+            Game::Hytale => "UDP",
+            Game::Minecraft => "TCP",
+        }
+    }
+}
+
+/// Minecraft server software.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Loader {
+    #[default]
+    Vanilla,
+    Fabric,
+    Quilt,
+    Forge,
+    NeoForge,
+}
+
+impl Loader {
+    pub const ALL: [Loader; 5] = [Loader::Vanilla, Loader::Fabric, Loader::Quilt, Loader::Forge, Loader::NeoForge];
+    pub fn label(self) -> &'static str {
+        match self {
+            Loader::Vanilla => "Vanilla",
+            Loader::Fabric => "Fabric",
+            Loader::Quilt => "Quilt",
+            Loader::Forge => "Forge",
+            Loader::NeoForge => "NeoForge",
+        }
+    }
+    pub fn key(self) -> &'static str {
+        match self {
+            Loader::Vanilla => "vanilla",
+            Loader::Fabric => "fabric",
+            Loader::Quilt => "quilt",
+            Loader::Forge => "forge",
+            Loader::NeoForge => "neoforge",
+        }
+    }
+    pub fn from_key(k: &str) -> Loader {
+        Loader::ALL.into_iter().find(|l| l.key() == k).unwrap_or_default()
+    }
+    pub fn has_mods(self) -> bool {
+        self != Loader::Vanilla
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct InstanceConfig {
     pub id: String,
     pub name: String,
-    /// Hytale server version from the local version cache (`versions/<version>`).
+    pub game: Game,
+    /// Hytale: server version from the local version cache (`versions/<version>`).
+    /// Minecraft: the game version (`1.21.4`, `26.3`, a snapshot id).
     pub version: String,
+    /// Minecraft: server software and its version (empty for vanilla).
+    pub loader: Loader,
+    pub loader_version: String,
+    /// Minecraft: the Java major version Mojang lists for the game version (0 = unknown).
+    pub java_major: u32,
+    /// Minecraft: what follows the JVM options to launch the installed server (`-jar server.jar`,
+    /// `@libraries/…/win_args.txt`). Empty until the install task is done.
+    pub launch: Vec<String>,
+    /// This server's own `java` (blank = automatic).
+    pub java_path: String,
     /// Channel used by "Update": `release` or `pre-release`.
     pub patchline: String,
     /// UDP port (QUIC) the server binds to on 0.0.0.0.
@@ -237,7 +325,13 @@ impl Default for InstanceConfig {
         Self {
             id: String::new(),
             name: String::new(),
+            game: Game::Hytale,
             version: String::new(),
+            loader: Loader::Vanilla,
+            loader_version: String::new(),
+            java_major: 0,
+            launch: Vec::new(),
+            java_path: String::new(),
             patchline: "release".into(),
             port: DEFAULT_GAME_PORT,
             min_memory_mb: 2048,
@@ -426,6 +520,10 @@ pub struct AppState {
     pub urls: RwLock<Vec<String>>,
     /// this network's public IP (for the "copy public address" button)
     pub public_ip: RwLock<Option<String>>,
+    /// Minecraft versions and loader versions (fetched when the UI needs them)
+    pub mc_catalog: RwLock<crate::minecraft::Catalog>,
+    /// Linux / macOS: this program runs from outside its install location (offer to install / update)
+    pub install_offer: RwLock<Option<crate::selfinstall::Offer>>,
     changes: watch::Sender<u64>,
     pub quitting: AtomicBool,
     pub quit: tokio::sync::Notify,
@@ -460,6 +558,8 @@ impl AppState {
             mode,
             urls: RwLock::new(Vec::new()),
             public_ip: RwLock::new(None),
+            mc_catalog: RwLock::new(Default::default()),
+            install_offer: RwLock::new(None),
             changes,
             quitting: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),
@@ -699,6 +799,12 @@ mod tests {
         let i: InstanceConfig = serde_json::from_str(r#"{"id": "a", "name": "x"}"#).unwrap();
         assert_eq!(i.port, DEFAULT_GAME_PORT);
         assert_eq!(i.patchline, "release");
+        // instances from before Minecraft support are Hytale servers
+        assert_eq!(i.game, Game::Hytale);
+        let m: InstanceConfig = serde_json::from_str(r#"{"id": "b", "game": "minecraft", "loader": "neoforge"}"#).unwrap();
+        assert_eq!((m.game, m.loader), (Game::Minecraft, Loader::NeoForge));
+        assert_eq!(serde_json::to_value(Loader::NeoForge).unwrap(), "neoforge");
+        assert_eq!(Loader::from_key("quilt"), Loader::Quilt);
     }
 
     #[test]

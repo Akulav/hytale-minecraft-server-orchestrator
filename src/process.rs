@@ -1,5 +1,5 @@
-//! Hytale server processes: build the `java` command (std `Command`), spawn it, pump its console into
-//! the instance log, read players / login prompts from it, send console commands, stop and kill.
+//! Server processes (Hytale and Minecraft): build the `java` command (std `Command`), spawn it, pump its
+//! console into the instance log, read players / login prompts from it, send console commands, stop and kill.
 
 use anyhow::{Context, Result, anyhow, bail};
 use std::process::Stdio;
@@ -8,7 +8,7 @@ use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
-use crate::state::{InstanceConfig, LogKind, Shared, Status, now_ms};
+use crate::state::{Game, InstanceConfig, LogKind, Shared, Status, now_ms};
 
 /// How long a server gets to save and exit after `/stop` before it is killed.
 const STOP_TIMEOUT: Duration = Duration::from_secs(45);
@@ -60,7 +60,7 @@ pub fn strip_ansi(s: &str) -> String {
     re.replace_all(s, "").replace('\r', "")
 }
 
-fn split_args(s: &str) -> Vec<String> {
+pub(crate) fn split_args(s: &str) -> Vec<String> {
     // simple shell-like split: spaces, with "double quotes" for values containing spaces
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -117,20 +117,23 @@ pub fn udp_port_free(port: u16) -> bool {
     std::net::UdpSocket::bind(("0.0.0.0", port)).is_ok()
 }
 
-pub async fn start(state: &Shared, id: &str) -> Result<()> {
-    let inst = state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
-    if state.status(id).is_active() {
-        bail!("{} is already running", inst.name);
+/// Is the game's port free (UDP for Hytale, TCP for Minecraft)?
+pub fn port_free(game: Game, port: u16) -> bool {
+    match game {
+        Game::Hytale => udp_port_free(port),
+        Game::Minecraft => std::net::TcpListener::bind(("0.0.0.0", port)).is_ok(),
     }
-    if let Some(t) = state.running_task_for(id) {
-        bail!("wait for \"{}\" to finish", t.title);
-    }
-    if let Some(other) = state.instances.read().iter().find(|o| o.id != id && o.port == inst.port && state.status(&o.id).is_active()) {
-        bail!("port {} is used by the running instance \"{}\"", inst.port, other.name);
-    }
-    if !udp_port_free(inst.port) {
-        bail!("UDP port {} is in use by another program", inst.port);
-    }
+}
+
+/// What to run: java, its arguments, extra environment, lines for the console log.
+struct Launch {
+    java: std::path::PathBuf,
+    args: Vec<String>,
+    env: Vec<(&'static str, String)>,
+    notes: Vec<String>,
+}
+
+async fn hytale_launch(state: &Shared, id: &str, inst: &InstanceConfig) -> Result<Launch> {
     let dir = state.paths.server_dir(id);
     if !dir.join("HytaleServer.jar").is_file() {
         if crate::versions::is_complete(state, &inst.version) {
@@ -143,36 +146,75 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
     if !assets.is_file() {
         bail!("Assets.zip of version {} is missing - download the version again", inst.version);
     }
-    let java = crate::java::require(state).await?;
-    let mut args = server_args(&inst, &assets, dir.join("HytaleServer.aot").is_file());
-
+    let java = if inst.java_path.trim().is_empty() { crate::java::require(state).await? } else { std::path::PathBuf::from(inst.java_path.trim()) };
+    let mut args = server_args(inst, &assets, dir.join("HytaleServer.aot").is_file());
+    let mut env = vec![
+        // the orchestrator handles updates (versions + 1-click update); the server's own updater would
+        // fight with it
+        ("HYTALE_DISABLE_UPDATES", "1".to_string()),
+    ];
+    let mut notes = Vec::new();
     // the saved Hytale account signs the server in: no prompt (token passthrough, see account.rs)
-    let mut session = None;
     if !inst.offline_auth {
         match crate::account::session_for_server(state).await {
             Ok(Some((s, i, owner))) => {
                 args.push("--owner-uuid".into());
                 args.push(owner);
-                session = Some((s, i));
+                // environment, not arguments: tokens never show up in the logged command line
+                env.push(("HYTALE_SERVER_SESSION_TOKEN", s));
+                env.push(("HYTALE_SERVER_IDENTITY_TOKEN", i));
+                let name = crate::account::load(state).map(|a| a.profile_name()).unwrap_or_default();
+                notes.push(format!("Signed in with your Hytale account ({name}) - no sign-in prompt needed"));
             }
             Ok(None) => {}
-            Err(e) => state.system_log(id, format!("Hytale account: {e:#} - the server will ask to sign in instead")),
+            Err(e) => notes.push(format!("Hytale account: {e:#} - the server will ask to sign in instead")),
         }
     }
+    Ok(Launch { java, args, env, notes })
+}
+
+async fn minecraft_launch(state: &Shared, id: &str, inst: &InstanceConfig) -> Result<Launch> {
+    if inst.launch.is_empty() {
+        bail!("the server software is not installed yet - wait for the install task, or reinstall it in Settings");
+    }
+    let dir = state.paths.server_dir(id);
+    if !crate::minecraft::eula_accepted(&dir) {
+        bail!("accept the Minecraft EULA first (instance Settings)");
+    }
+    crate::minecraft::sync_port(state, inst)?;
+    let java = match crate::java::pick_minecraft(state, inst).await {
+        crate::java::McJava::Ready(p) => p,
+        crate::java::McJava::Missing(major) => {
+            crate::actions::install_java_major(state, major);
+            bail!("this server needs Java {major} - installing it now (see Tasks); press Start again when it is done");
+        }
+    };
+    Ok(Launch { java, args: crate::minecraft::launch_args(inst), env: Vec::new(), notes: Vec::new() })
+}
+
+pub async fn start(state: &Shared, id: &str) -> Result<()> {
+    let inst = state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
+    if state.status(id).is_active() {
+        bail!("{} is already running", inst.name);
+    }
+    if let Some(t) = state.running_task_for(id) {
+        bail!("wait for \"{}\" to finish", t.title);
+    }
+    if let Some(other) = state.instances.read().iter().find(|o| o.id != id && o.port == inst.port && state.status(&o.id).is_active()) {
+        bail!("port {} is used by the running instance \"{}\"", inst.port, other.name);
+    }
+    if !port_free(inst.game, inst.port) {
+        bail!("{} port {} is in use by another program", inst.game.protocol(), inst.port);
+    }
+    let dir = state.paths.server_dir(id);
+    let Launch { java, args, env, notes } = match inst.game {
+        Game::Hytale => hytale_launch(state, id, &inst).await?,
+        Game::Minecraft => minecraft_launch(state, id, &inst).await?,
+    };
 
     let mut cmd = std::process::Command::new(&java);
-    if let Some((s, i)) = &session {
-        // environment, not arguments: tokens never show up in the logged command line
-        cmd.env("HYTALE_SERVER_SESSION_TOKEN", s).env("HYTALE_SERVER_IDENTITY_TOKEN", i);
-    }
-    cmd.args(&args)
-        .current_dir(&dir)
-        // the orchestrator handles updates (versions + 1-click update); the server's own updater would
-        // fight with it
-        .env("HYTALE_DISABLE_UPDATES", "1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.envs(env.iter().map(|(k, v)| (*k, v.as_str())));
+    cmd.args(&args).current_dir(&dir).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     no_window(&mut cmd);
     #[cfg(target_os = "linux")]
     unsafe {
@@ -183,10 +225,13 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
             Ok(())
         });
     }
-    state.system_log(id, format!("Starting {} ({}) on UDP port {}", inst.name, inst.version, inst.port));
-    if session.is_some() {
-        let name = crate::account::load(state).map(|a| a.profile_name()).unwrap_or_default();
-        state.system_log(id, format!("Signed in with your Hytale account ({name}) - no sign-in prompt needed"));
+    let what = match inst.game {
+        Game::Hytale => format!("Hytale {}", inst.version),
+        Game::Minecraft => crate::instance::software_label(&inst),
+    };
+    state.system_log(id, format!("Starting {} ({what}) on {} port {}", inst.name, inst.game.protocol(), inst.port));
+    for n in notes {
+        state.system_log(id, n);
     }
     state.system_log(id, format!("> {} {}", java.display(), args.join(" ")));
     let mut child = tokio::process::Command::from(cmd).kill_on_drop(true).spawn().with_context(|| format!("cannot start {}", java.display()))?;
@@ -368,8 +413,10 @@ fn start_boxed(state: Shared, id: String) -> std::pin::Pin<Box<dyn std::future::
 
 /// Built-in console patterns (Hytale's exact log wording can change between versions; Settings can
 /// override them). Group 1 is the player name.
-const JOIN_PATTERNS: &str = r"(?i)(?:\bAdding player '([^']+)'|\bplayer '?([A-Za-z0-9_]{2,32})'? (?:has )?(?:joined|connected)|^\W*(?:\[[^\]]*\]\s*)*([A-Za-z0-9_]{2,32}) (?:has )?joined (?:the (?:game|server|world)|world))";
-const LEAVE_PATTERNS: &str = r"(?i)(?:\bRemoving player '([^']+)'|\bplayer '?([A-Za-z0-9_]{2,32})'? (?:has )?(?:left|disconnected)|^\W*(?:\[[^\]]*\]\s*)*([A-Za-z0-9_]{2,32}) (?:has )?(?:left|disconnected)(?: the (?:game|server|world))?)";
+/// Minecraft lines look like `[12:00:00] [Server thread/INFO]: Steve joined the game` (Forge adds a
+/// `[minecraft/MinecraftServer]` bracket), hence the optional `:` after the brackets.
+const JOIN_PATTERNS: &str = r"(?i)(?:\bAdding player '([^']+)'|\bplayer '?([A-Za-z0-9_]{2,32})'? (?:has )?(?:joined|connected)|^\W*(?:\[[^\]]*\]\s*)*:?\s*([A-Za-z0-9_]{2,32}) (?:has )?joined (?:the (?:game|server|world)|world))";
+const LEAVE_PATTERNS: &str = r"(?i)(?:\bRemoving player '([^']+)'|\bplayer '?([A-Za-z0-9_]{2,32})'? (?:has )?(?:left|disconnected)|^\W*(?:\[[^\]]*\]\s*)*:?\s*([A-Za-z0-9_]{2,32}) (?:has )?(?:left|disconnected)(?: the (?:game|server|world))?)";
 
 fn first_group(re: &regex::Regex, line: &str) -> Option<String> {
     let c = re.captures(line)?;
@@ -456,8 +503,12 @@ struct Follow {
 }
 
 fn on_line(state: &Shared, id: &str, kind: LogKind, line: &str) {
-    let events = classify(&patterns(state), line);
-    let offline = state.instance(id).is_some_and(|i| i.offline_auth);
+    let mut events = classify(&patterns(state), line);
+    let (offline, game) = state.instance(id).map(|i| (i.offline_auth, i.game)).unwrap_or_default();
+    if game == Game::Minecraft {
+        // Hytale sign-in prompts don't exist there
+        events.retain(|e| matches!(e, LineEvent::Joined(_) | LineEvent::Left(_) | LineEvent::Ready));
+    }
     let follow = state.with_runtime(id, |r| {
         let mut f = Follow::default();
         r.push_log(kind, line);
@@ -528,13 +579,31 @@ pub fn start_login(state: &Shared, id: &str) -> Result<()> {
     send_command(state, id, "/auth login device")
 }
 
-/// Sends a console command (with a leading `/`, as in the Hytale console).
+/// The console command for an action, in the game's syntax (Hytale: leading `/`, Minecraft: none).
+pub fn game_command(game: Game, cmd: &str) -> String {
+    let bare = cmd.trim().trim_start_matches('/');
+    match game {
+        Game::Hytale => format!("/{bare}"),
+        Game::Minecraft => bare.to_string(),
+    }
+}
+
+/// Saves the worlds to disk.
+pub fn save_command(game: Game) -> &'static str {
+    match game {
+        Game::Hytale => "/save",
+        Game::Minecraft => "save-all flush",
+    }
+}
+
+/// Sends a console command (Hytale gets a leading `/`, Minecraft's console takes commands without it).
 pub fn send_command(state: &Shared, id: &str, command: &str) -> Result<()> {
     let cmd = command.trim();
     if cmd.is_empty() {
         return Ok(());
     }
-    let cmd = if cmd.starts_with('/') { cmd.to_string() } else { format!("/{cmd}") };
+    let game = state.instance(id).map(|i| i.game).unwrap_or_default();
+    let cmd = game_command(game, cmd);
     let tx = state.with_runtime(id, |r| r.stdin.clone()).ok_or_else(|| anyhow!("the server is not running"))?;
     tx.send(cmd.clone()).map_err(|_| anyhow!("the server console is closed"))?;
     state.with_runtime(id, |r| r.push_log(LogKind::Input, format!("> {cmd}")));
@@ -552,8 +621,9 @@ pub async fn stop(state: &Shared, id: &str) -> Result<()> {
         r.status = Status::Stopping;
         r.pid
     });
-    state.system_log(id, "Stopping (sending /stop)…");
-    if send_command(state, id, "/stop").is_err() {
+    let stop = game_command(state.instance(id).map(|i| i.game).unwrap_or_default(), "stop");
+    state.system_log(id, format!("Stopping (sending {stop})…"));
+    if send_command(state, id, &stop).is_err() {
         kill(state, id);
     }
     let deadline = tokio::time::Instant::now() + STOP_TIMEOUT;
@@ -591,7 +661,8 @@ pub async fn stop_all(state: &Shared) {
     futures::future::join_all(jobs).await;
 }
 
-/// Makes a player operator (`/op add`) or removes it (`/op remove`), and remembers the list.
+/// Makes a player operator or removes it (Hytale `/op add|remove`, Minecraft `op` / `deop`), and remembers
+/// the list.
 pub fn set_operator(state: &Shared, id: &str, player: &str, op: bool) -> Result<()> {
     let player = player.trim();
     if player.is_empty() || player.len() > 64 || player.contains(char::is_whitespace) {
@@ -600,7 +671,14 @@ pub fn set_operator(state: &Shared, id: &str, player: &str, op: bool) -> Result<
     if !state.status(id).is_active() {
         bail!("start the server first: operators are set through its console");
     }
-    send_command(state, id, &format!("/op {} {player}", if op { "add" } else { "remove" }))?;
+    let game = state.instance(id).map(|i| i.game).unwrap_or_default();
+    let cmd = match (game, op) {
+        (Game::Hytale, true) => format!("/op add {player}"),
+        (Game::Hytale, false) => format!("/op remove {player}"),
+        (Game::Minecraft, true) => format!("op {player}"),
+        (Game::Minecraft, false) => format!("deop {player}"),
+    };
+    send_command(state, id, &cmd)?;
     state.update_instance(id, |i| {
         i.operators.retain(|p| !p.eq_ignore_ascii_case(player));
         if op {
@@ -640,6 +718,13 @@ mod tests {
         assert_eq!(classify(&p, "> Authentication successful! Mode: OAUTH_DEVICE"), vec![LineEvent::AuthOk]);
         assert!(classify(&p, "Hytale Server Booted! [Multiplayer]").contains(&LineEvent::Ready));
         assert!(classify(&p, "Loading assets…").is_empty());
+        // Minecraft (vanilla and Forge log layouts)
+        assert_eq!(classify(&p, "[12:00:01] [Server thread/INFO]: Steve joined the game"), vec![LineEvent::Joined("Steve".into())]);
+        assert_eq!(classify(&p, "[12:00:01] [Server thread/INFO] [minecraft/MinecraftServer]: Steve left the game"), vec![LineEvent::Left("Steve".into())]);
+        assert!(classify(&p, "[12:00:01] [Server thread/INFO]: <Steve> Bob joined the game").is_empty());
+        assert!(classify(&p, "[12:00:00] [Server thread/INFO]: Done (3.512s)! For help, type \"help\"").contains(&LineEvent::Ready));
+        assert_eq!(game_command(Game::Minecraft, "/op Steve"), "op Steve");
+        assert_eq!(game_command(Game::Hytale, "op add Steve"), "/op add Steve");
         // a custom pattern replaces the built-in one
         let custom = LinePatterns::new(r"JOIN:(\w+)", "");
         assert_eq!(classify(&custom, "JOIN:Bob"), vec![LineEvent::Joined("Bob".into())]);

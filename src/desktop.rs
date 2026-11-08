@@ -1,5 +1,5 @@
-//! Desktop mode: a native window (tao + wry: WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux)
-//! showing the same UI the web server serves. Closing the window stops the servers cleanly and quits.
+//! Desktop mode on Windows and macOS: a native window (tao + wry: WebView2 / WKWebView) showing the same UI
+//! the web server serves. Closing the window stops the servers cleanly and quits. Linux uses `browser.rs`.
 
 use tao::dpi::LogicalSize;
 use tao::event::{Event, WindowEvent};
@@ -97,16 +97,8 @@ pub fn run(state: Shared, url: String) -> ! {
             NewWindowResponse::Deny
         });
 
-    #[cfg(not(target_os = "linux"))]
-    let webview = builder.build(&window);
-    #[cfg(target_os = "linux")]
-    let webview = {
-        use tao::platform::unix::WindowExtUnix;
-        use wry::WebViewBuilderExtUnix;
-        builder.build_gtk(window.default_vbox().expect("gtk window"))
-    };
-    let webview = webview.unwrap_or_else(|e| {
-        crate::logln(&format!("cannot create the web view: {e}. Windows needs the WebView2 runtime; Linux needs WebKitGTK 4.1. Or run with --headless."));
+    let webview = builder.build(&window).unwrap_or_else(|e| {
+        crate::logln(&format!("cannot create the web view: {e}. Windows needs the WebView2 runtime. Or run with --headless."));
         std::process::exit(1)
     });
 

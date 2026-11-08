@@ -1,8 +1,8 @@
 [package]
 name = "hyve"
 # The app version. scripts/bump-version.ps1 keeps Cargo.lock, the setup script and CHANGELOG.md in sync.
-version = "0.4.0"
-description = "Hyve - run and manage Hytale servers from one place. Made by Akulav."
+version = "0.5.0"
+description = "Hyve - run and manage Hytale and Minecraft servers from one place. Made by Akulav."
 authors = ["Akulav"]
 edition = "2024"
 license-file = "LICENSE"
@@ -10,8 +10,9 @@ repository = "https://github.com/Akulav/hytale-server-orchestrator"
 publish = false
 
 [features]
-# `desktop` opens a native window (wry/tao). Without it the program is headless-only: the web UI on a port.
-# The Linux release ships both builds: hyve-linux-x64 (desktop) and -headless (no GUI libraries needed).
+# `desktop` opens a native window (wry/tao) on Windows and macOS. Linux never links a web view (no GTK /
+# WebKit needed): its desktop mode shows the UI in a browser app window, so one Linux binary also runs
+# headless on servers. Without the feature, Windows / macOS use that browser window too.
 default = ["desktop"]
 desktop = ["dep:wry", "dep:tao", "dep:png", "dep:muda"]
 
@@ -31,6 +32,7 @@ regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha1 = "0.10"
 sha2 = "0.10"
 sysinfo = { version = "0.37", default-features = false, features = ["system"] }
 tar = "0.4"
@@ -38,7 +40,8 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
-# desktop window
+# desktop window (Windows: WebView2, macOS: WKWebView; not on Linux)
+[target.'cfg(not(target_os = "linux"))'.dependencies]
 png = { version = "0.18", optional = true }
 tao = { version = "0.37", optional = true }
 wry = { version = "0.57", optional = true }

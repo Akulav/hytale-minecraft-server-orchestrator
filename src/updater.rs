@@ -1,20 +1,19 @@
 //! In-app updates from the GitHub releases of Akulav/hytale-server-orchestrator: checked 15 s after start
 //! and every 6 hours (setting), or on demand (About → Check for updates).
 //!
-//! A release has one file per system, always checked against the release's SHA256SUMS.txt first:
+//! A release has exactly three programs - one per system, the same file for the first install and for
+//! updates - plus SHA256SUMS.txt, which every download is checked against first:
 //! - Windows: `Hyve-setup.exe` (Inno Setup). Started on this install's folder with `/SILENT`
 //!   (a progress window, no questions); Hyve stops its servers and ends; the setup replaces the
 //!   program and starts it again.
-//! - Linux: `hyve-linux-x64` (desktop) / `hyve-linux-x64-headless`, macOS:
-//!   `hyve-macos-arm64`: the program itself, swapped in place (the old one is kept as `.old` until
-//!   the next start) and started again with the same arguments.
+//! - Linux: `hyve-linux-x64` (desktop and headless in one), macOS: `hyve-macos-arm64`: the program
+//!   itself, swapped in place (the old one is kept as `.old` until the next start) and started again with
+//!   the same arguments. The first install is the same file installing itself (selfinstall.rs).
 //!
 //! A copy built on this computer (…/target/…) never replaces itself.
 //!
-//! Rename (0.4, HyOrchestrator → Hyve): copies before 0.4 look for `HyOrchestrator-setup.exe`,
-//! `hyorchestrator-linux-x64(-headless)` and `hyorchestrator-macos-arm64`. The Build workflow publishes
-//! the new files under those old names too (same bytes, both in SHA256SUMS.txt), so old installs update
-//! straight into Hyve. Keep that while people may still run a pre-0.4 version.
+//! Since 0.5 there are no other files: no macOS .dmg, no `-headless` Linux build and no copies under the
+//! pre-0.4 names (HyOrchestrator…). Copies that looked for those update by hand once.
 
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
@@ -35,10 +34,8 @@ pub fn asset_name() -> &'static str {
         "Hyve-setup.exe"
     } else if cfg!(target_os = "macos") {
         "hyve-macos-arm64"
-    } else if cfg!(feature = "desktop") {
-        "hyve-linux-x64"
     } else {
-        "hyve-linux-x64-headless"
+        "hyve-linux-x64"
     }
 }
 

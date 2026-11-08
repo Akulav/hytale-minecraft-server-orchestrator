@@ -1,11 +1,12 @@
-//! Backups of an instance's "world + mods" (universe/, mods/ and the server's JSON configs) as zip files
-//! in `data/backups/<instance>/`, and restoring them.
+//! Backups of an instance's "world + mods" (Hytale: universe/, mods/ and the server's JSON configs;
+//! Minecraft: world folders, mods/, config/, server.properties and player lists) as zip files in
+//! `data/backups/<instance>/`, and restoring them.
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
 use std::path::PathBuf;
 
-use crate::instance::DATA_ITEMS;
+use crate::instance::data_items;
 use crate::state::Shared;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -71,12 +72,17 @@ pub async fn create(state: &Shared, id: &str, label: &str) -> Result<String> {
     let zip = state.paths.backup_dir(id).join(&file);
     if state.status(id).is_active() {
         // ask the server to flush chunks first (harmless if the command doesn't exist)
-        let _ = crate::process::send_command(state, id, "/save");
+        let _ = crate::process::send_command(state, id, crate::process::save_command(inst.game));
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     }
     let base = state.paths.server_dir(id);
     let z2 = zip.clone();
-    let count = tokio::task::spawn_blocking(move || crate::archive::zip_paths(&base, &DATA_ITEMS, &z2)).await??;
+    let items = data_items(state, id);
+    let count = tokio::task::spawn_blocking(move || {
+        let refs: Vec<&str> = items.iter().map(String::as_str).collect();
+        crate::archive::zip_paths(&base, &refs, &z2)
+    })
+    .await??;
     state.notify();
     crate::logln(&format!("[{}] backup {file}: {count} files", inst.name));
     Ok(file)
@@ -91,9 +97,10 @@ pub async fn restore(state: &Shared, id: &str, file: &str) -> Result<String> {
     let zip = backup_path(state, id, file)?;
     let safety = create(state, id, "before-restore").await.context("the safety backup failed, nothing was restored")?;
     let base = state.paths.server_dir(id);
+    let items = data_items(state, id);
     tokio::task::spawn_blocking(move || -> Result<()> {
-        for item in DATA_ITEMS {
-            let p = base.join(item);
+        for item in items {
+            let p = base.join(&item);
             if p.is_dir() {
                 std::fs::remove_dir_all(&p)?;
             } else if p.is_file() {

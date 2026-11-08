@@ -3,13 +3,17 @@
 
 use dioxus::prelude::*;
 
-use super::{Empty, Icon, Meter, Page, PageHeader, Spark, Stat, TaskCard, run_job, use_state, use_toast};
+use super::{Banner, Empty, Icon, Meter, Page, PageHeader, Spark, Stat, TaskCard, run_job, use_state, use_toast};
 use crate::state::{Status, human_duration, now_ms};
 
 #[component]
 pub fn Dashboard(nav: Signal<Page>, tick: u64) -> Element {
     let state = use_state();
+    let toast = use_toast();
     let _ = tick;
+    let offer = state.install_offer.read().clone();
+    let mut dismissed = use_signal(|| false);
+    let st_install = state.clone();
     let host = state.host.read().clone();
     let instances = state.instances.read().clone();
     let java = state.java.read().clone();
@@ -25,13 +29,33 @@ pub fn Dashboard(nav: Signal<Page>, tick: u64) -> Element {
     let waiting_login = state.tasks.read().iter().find(|t| t.login.is_some()).cloned();
     let java_ok = java.error.is_empty() && java.major > 0;
     let has_account = crate::account::load(&state).is_some();
-    let ready = java_ok && has_versions && has_account && !instances.is_empty();
+    // the Hytale steps only matter when there is (or will be) a Hytale server
+    let only_minecraft = !instances.is_empty() && instances.iter().all(|i| i.game == crate::state::Game::Minecraft);
+    let ready = !instances.is_empty() && (only_minecraft || (java_ok && has_versions && has_account));
     let share = if instances.is_empty() { 0.0 } else { running as f32 / instances.len() as f32 };
 
     rsx! {
         div { class: "page",
-            PageHeader { title: "Dashboard", subtitle: "Every Hytale server on this machine at a glance.",
+            PageHeader { title: "Dashboard", subtitle: "Every Hytale and Minecraft server on this machine at a glance.",
                 button { class: "btn primary", onclick: move |_| nav.set(Page::Create), Icon { name: "plus" } "New instance" }
+            }
+            if let Some(o) = offer.filter(|_| !dismissed()) {
+                Banner { kind: "info", icon: "download",
+                    if let Some(v) = o.installed.clone() {
+                        b { "This Hyve ({crate::state::VERSION}) is newer than the installed one ({v}). " }
+                        "Update the installed copy? Its servers and data stay as they are."
+                    } else {
+                        b { "Install Hyve for your user? " }
+                        "It goes to {o.target.display()} with a menu entry and icon; later updates install themselves. Or keep running it from here."
+                    }
+                    div { class: "banner-actions",
+                        button { class: "btn sm primary", onclick: move |_| {
+                            crate::state::spawn_task(&st_install, "Install Hyve", None, crate::selfinstall::install_task);
+                            toast.ok("Installing - Hyve restarts from its new place");
+                        }, if o.installed.is_some() { "Update it" } else { "Install" } }
+                        button { class: "btn sm ghost", onclick: move |_| dismissed.set(true), "Just run it" }
+                    }
+                }
             }
             if let Some(t) = waiting_login {
                 TaskCard { task: t, expanded: false }
@@ -80,7 +104,7 @@ fn GetStarted(nav: Signal<Page>, java_ok: bool, java_error: String, has_versions
     let java_text = if java_ok { "Java 25 is ready.".to_string() } else if java_error.is_empty() { "Checking for Java 25…".to_string() } else { "Hytale servers need Java 25. Install it in one click.".to_string() };
     rsx! {
         div { class: "get-started glass",
-            div { class: "gs-head", h2 { "Get started" } span { class: "muted small", "Four one-time steps to your first Hytale server" } }
+            div { class: "gs-head", h2 { "Get started" } span { class: "muted small", "Four one-time steps to your first Hytale server - Minecraft servers need none of them (New instance → Minecraft)" } }
             div { class: "steps",
                 div { class: step(java_ok, true),
                     div { class: "step-num", if java_ok { "✓" } else { "1" } }
@@ -113,7 +137,7 @@ fn GetStarted(nav: Signal<Page>, java_ok: bool, java_error: String, has_versions
                     b { "Your server" }
                     p { class: "muted small", "Create an instance with a name, port and world seed, then press Start." }
                     if !has_instances {
-                        button { class: "btn sm", disabled: !has_versions, onclick: move |_| nav.set(Page::Create), "New instance" }
+                        button { class: "btn sm", onclick: move |_| nav.set(Page::Create), "New instance" }
                     }
                 }
             }
@@ -155,6 +179,11 @@ fn InstanceCard(id: String, nav: Signal<Page>, tick: u64) -> Element {
         busy.map(|t| ("", "activity", format!("{}: {}", t.title, t.message)))
     };
     let note_cls = note.as_ref().map(|n| n.0).unwrap_or_default();
+    let chip = match inst.game {
+        crate::state::Game::Hytale => inst.version.clone(),
+        crate::state::Game::Minecraft if inst.loader == crate::state::Loader::Vanilla => format!("MC {}", inst.version),
+        crate::state::Game::Minecraft => format!("MC {} · {}", inst.version, inst.loader.label()),
+    };
 
     rsx! {
         div { class: "card glass inst-card {status_css}",
@@ -166,8 +195,8 @@ fn InstanceCard(id: String, nav: Signal<Page>, tick: u64) -> Element {
                 span { class: "pill {status_css}", "{status_label}" }
             }
             div { class: "chips",
-                span { class: "chip", "{inst.version}" }
-                span { class: "chip", "UDP {inst.port}" }
+                span { class: "chip", "{chip}" }
+                span { class: "chip", "{inst.game.protocol()} {inst.port}" }
                 span { class: "chip", "{inst.max_memory_mb / 1024} GB" }
             }
             div { class: "mini-stats",

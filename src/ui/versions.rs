@@ -20,6 +20,7 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
     let (s1, s2, s3, s4) = (state.clone(), state.clone(), state.clone(), state.clone());
     let mac = cfg!(target_os = "macos");
     let signed_in = versions::downloader_signed_in(&state);
+    let mc_jars = crate::minecraft::cached_jars(&state);
 
     rsx! {
         div { class: "page",
@@ -97,7 +98,7 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
                         tbody {
                             for v in list {
                                 {
-                                    let users: Vec<String> = instances.iter().filter(|i| i.version == v.version).map(|i| i.name.clone()).collect();
+                                    let users: Vec<String> = instances.iter().filter(|i| i.game == crate::state::Game::Hytale && i.version == v.version).map(|i| i.name.clone()).collect();
                                     let used = users.join(", ");
                                     let st = state.clone();
                                     let ver = v.version.clone();
@@ -123,8 +124,35 @@ pub fn VersionsPage(nav: Signal<Page>, tick: u64) -> Element {
                     }
                 }
             }
+            div { class: "panel glass",
+                h3 { "Minecraft server jars ({mc_jars.len()})" }
+                p { class: "muted small", "Minecraft versions and loaders are downloaded when you create or update an instance - nothing to fetch here. Mojang's server jars are kept so the next instance of the same version starts faster; deleting one is safe." }
+                if !mc_jars.is_empty() {
+                    table { class: "table",
+                        tbody {
+                            for (v, size) in mc_jars {
+                                {
+                                    let st = state.clone();
+                                    let v2 = v.clone();
+                                    rsx! {
+                                        tr { key: "{v}",
+                                            td { b { class: "mono", "Minecraft {v}" } }
+                                            td { class: "muted", "{human_bytes(size)}" }
+                                            td { class: "right",
+                                                ConfirmButton { label: "Delete", confirm: "Delete?", class: "sm ghost danger-text", disabled: false,
+                                                    onconfirm: move |_| toast.result(crate::minecraft::delete_cached_jar(&st, &v2), "Deleted")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Banner { kind: "info", icon: "info",
-                "Keep a version only while an instance uses it: each takes about 3-4 GB. "
+                "Keep a Hytale version only while an instance uses it: each takes about 3-4 GB. "
                 button { class: "btn sm ghost", onclick: move |_| nav.set(Page::Create), "Create an instance" }
             }
         }
