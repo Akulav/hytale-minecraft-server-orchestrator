@@ -5,6 +5,21 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-10
+### Fixed
+- 1-click **Update** and version / software switches of a running server now start it again afterwards (the
+  restart was refused because the update's own task was still running).
+- Clicking **Start** twice quickly could launch two copies of the same server; the second click is now refused.
+  A Stop pressed while a server is still preparing to start cancels that start.
+- Back up, Restore and Switch version are refused while another task (install, update, restore…) works on the same
+  instance, and an instance can't be deleted in the middle of one.
+- A damaged `instances.json` or `settings.json` (or one written by a newer version) is kept as
+  `….broken-<time>` instead of being overwritten with an empty list on the next save.
+- Downloads that stop receiving data give up after 90 s instead of hanging forever, a cut-off download is no
+  longer accepted as complete, and the partial `.part` file is removed after a failure.
+- Deleting a cached version, a cached Minecraft jar, a backup or a mod only acts on a real entry of that list
+  (an empty or `..` name can no longer reach the folder above it).
+
 ## [0.5.0] - 2026-11-08
 ### Added
 - **Minecraft (Java Edition) servers**, next to Hytale ones: New instance → **Minecraft**. Any release (or snapshot),

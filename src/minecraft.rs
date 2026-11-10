@@ -769,7 +769,11 @@ pub fn cached_jars(state: &Shared) -> Vec<(String, u64)> {
 }
 
 pub fn delete_cached_jar(state: &Shared, game: &str) -> Result<()> {
-    let dir = state.paths.minecraft.join("vanilla").join(crate::versions::sanitize(game));
+    let name = crate::versions::sanitize(game);
+    if name.is_empty() {
+        bail!("invalid version {game}");
+    }
+    let dir = state.paths.minecraft.join("vanilla").join(name);
     if dir.starts_with(state.paths.minecraft.join("vanilla")) && dir.is_dir() {
         std::fs::remove_dir_all(dir)?;
     }

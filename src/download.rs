@@ -7,6 +7,9 @@ use tokio::io::AsyncWriteExt;
 
 use crate::state::{Shared, human_bytes};
 
+/// Give up when a download receives nothing for this long.
+const STALL: std::time::Duration = std::time::Duration::from_secs(90);
+
 /// Downloads `url` to `dest` (via `dest.part`, renamed when complete).
 pub async fn to_file(state: &Shared, task: &str, url: &str, dest: &Path) -> Result<()> {
     if let Some(d) = dest.parent() {
@@ -16,13 +19,28 @@ pub async fn to_file(state: &Shared, task: &str, url: &str, dest: &Path) -> Resu
     if !resp.status().is_success() {
         bail!("{url} answered {}", resp.status());
     }
+    let mut part = dest.as_os_str().to_owned();
+    part.push(".part");
+    let part = std::path::PathBuf::from(part);
+    let result = write_body(state, task, resp, &part).await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&part).await;
+        return result;
+    }
+    tokio::fs::rename(&part, dest).await?;
+    Ok(())
+}
+
+async fn write_body(state: &Shared, task: &str, resp: reqwest::Response, part: &Path) -> Result<()> {
     let total = resp.content_length();
-    let part = dest.with_extension("part");
-    let mut file = tokio::fs::File::create(&part).await?;
+    let mut file = tokio::fs::File::create(part).await?;
     let mut done: u64 = 0;
     let mut last_report = 0u64;
     let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
+    loop {
+        // a connection that stops sending must not hang the task forever
+        let next = tokio::time::timeout(STALL, stream.next()).await.map_err(|_| anyhow::anyhow!("download stalled: no data for {} s", STALL.as_secs()))?;
+        let Some(chunk) = next else { break };
         if state.is_quitting() {
             bail!("cancelled: the program is closing");
         }
@@ -38,8 +56,11 @@ pub async fn to_file(state: &Shared, task: &str, url: &str, dest: &Path) -> Resu
             state.task_update(task, Some(&msg), total.map(|t| done as f32 / t.max(1) as f32));
         }
     }
+    if let Some(t) = total
+        && done < t
+    {
+        bail!("download incomplete: {} of {}", human_bytes(done), human_bytes(t));
+    }
     file.flush().await?;
-    drop(file);
-    tokio::fs::rename(&part, dest).await?;
     Ok(())
 }

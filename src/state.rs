@@ -534,11 +534,11 @@ pub type Shared = Arc<AppState>;
 impl AppState {
     pub fn load(paths: Paths, mode: Mode, rt: tokio::runtime::Handle) -> Result<Shared> {
         paths.create_all()?;
-        let mut settings: Settings = read_json(&paths.settings_file()).unwrap_or_default();
+        let mut settings: Settings = load_or_keep(&paths.settings_file());
         if settings.web_token.len() < 32 {
             settings.web_token = new_token();
         }
-        let instances: Vec<InstanceConfig> = read_json(&paths.registry_file()).unwrap_or_default();
+        let instances: Vec<InstanceConfig> = load_or_keep(&paths.registry_file());
         let http = reqwest::Client::builder()
             .user_agent(USER_AGENT)
             .connect_timeout(std::time::Duration::from_secs(20))
@@ -735,6 +735,32 @@ pub fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
     serde_json::from_str(&text).ok()
 }
 
+/// Reads a JSON file, or the default when it is missing. A file that exists but can't be read (damaged,
+/// or written by a newer version) is first copied to `<name>.broken-<time>`, because the next save would
+/// otherwise replace it with the empty default and lose it for good.
+pub fn load_or_keep<T: for<'de> Deserialize<'de> + Default>(path: &Path) -> T {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        if path.exists() {
+            crate::logln(&format!("cannot read {}: starting empty", path.display()));
+        }
+        return T::default();
+    };
+    match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            let mut keep = path.as_os_str().to_owned();
+            keep.push(format!(".broken-{}", chrono::Local::now().format("%Y%m%d-%H%M%S")));
+            let copied = std::fs::copy(path, &keep).is_ok();
+            crate::logln(&format!(
+                "{} is damaged ({e}){}",
+                path.display(),
+                if copied { format!(" - kept a copy as {}", PathBuf::from(&keep).display()) } else { String::new() }
+            ));
+            T::default()
+        }
+    }
+}
+
 /// Writes atomically (temp file + rename) so a crash never leaves half a file.
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     if let Some(dir) = path.parent() {
@@ -848,6 +874,20 @@ mod tests {
         let back: Vec<i32> = read_json(&f).unwrap();
         assert_eq!(back, vec![1, 2, 3]);
         assert!(!f.with_extension("json.tmp").exists());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn damaged_registry_is_kept_aside() {
+        let dir = std::env::temp_dir().join(format!("hyo-broken-{}", new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("instances.json");
+        assert!(load_or_keep::<Vec<InstanceConfig>>(&f).is_empty());
+        std::fs::write(&f, b"[{\"id\": \"a\", \"game\": \"bedrock\"}]").unwrap();
+        assert!(load_or_keep::<Vec<InstanceConfig>>(&f).is_empty());
+        let kept: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("instances.json.broken-")).collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(std::fs::read(kept[0].path()).unwrap(), std::fs::read(&f).unwrap());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

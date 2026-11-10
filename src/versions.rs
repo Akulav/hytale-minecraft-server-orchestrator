@@ -426,6 +426,10 @@ pub fn launcher_installs() -> Vec<(String, PathBuf)> {
 
 /// Deletes a cached version (refused while an instance uses it).
 pub fn delete(state: &Shared, version: &str) -> Result<()> {
+    // a folder name of the cache, never `..` or a path
+    if version.is_empty() || sanitize(version) != version {
+        bail!("invalid version {version}");
+    }
     let users: Vec<String> = state.instances.read().iter().filter(|i| i.game == crate::state::Game::Hytale && i.version == version).map(|i| i.name.clone()).collect();
     if !users.is_empty() {
         bail!("{version} is used by: {}", users.join(", "));

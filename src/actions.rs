@@ -62,7 +62,7 @@ async fn switch_version(st: &Shared, task: &str, id: &str, version: &str, backup
     st.system_log(id, format!("Server version is now {version}"));
     if was_running {
         st.task_update(task, Some("Starting the server…"), None);
-        process::start(st, id).await?;
+        process::start_from_task(st, id).await?;
     }
     Ok(())
 }
@@ -84,7 +84,7 @@ async fn reinstall_minecraft(st: &Shared, task: &str, id: &str, game: &str, load
     minecraft::install(st, task, id, game, loader, loader_version).await?;
     if was_running {
         st.task_update(task, Some("Starting the server…"), None);
-        process::start(st, id).await?;
+        process::start_from_task(st, id).await?;
     }
     Ok(())
 }
@@ -134,6 +134,7 @@ pub fn change_version(state: &Shared, id: &str, version: &str) -> Result<String>
     if inst.version == version {
         bail!("{} already uses {version}", inst.name);
     }
+    busy(state, id)?;
     let (id, version) = (id.to_string(), version.to_string());
     Ok(spawn_task(state, format!("{}: switch to {version}", inst.name), Some(&id.clone()), move |st, task| async move {
         switch_version(&st, &task, &id, &version, true).await?;
@@ -141,8 +142,17 @@ pub fn change_version(state: &Shared, id: &str, version: &str) -> Result<String>
     }))
 }
 
+/// Refuses when another task (update, install, restore…) works on this instance.
+fn busy(state: &Shared, id: &str) -> Result<()> {
+    match state.running_task_for(id) {
+        Some(t) => bail!("wait for \"{}\" to finish", t.title),
+        None => Ok(()),
+    }
+}
+
 pub fn backup_now(state: &Shared, id: &str, label: String) -> Result<String> {
     let inst = state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
+    busy(state, id)?;
     let id = id.to_string();
     Ok(spawn_task(state, format!("Back up {}", inst.name), Some(&id.clone()), move |st, task| async move {
         st.task_update(&task, Some("Packing world + mods…"), None);
@@ -156,6 +166,7 @@ pub fn restore(state: &Shared, id: &str, file: String) -> Result<String> {
     if state.status(id).is_active() {
         bail!("stop the server before restoring");
     }
+    busy(state, id)?;
     let id = id.to_string();
     Ok(spawn_task(state, format!("Restore {}", inst.name), Some(&id.clone()), move |st, task| async move {
         st.task_update(&task, Some("Restoring…"), None);

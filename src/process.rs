@@ -193,13 +193,45 @@ async fn minecraft_launch(state: &Shared, id: &str, inst: &InstanceConfig) -> Re
 }
 
 pub async fn start(state: &Shared, id: &str) -> Result<()> {
-    let inst = state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
-    if state.status(id).is_active() {
-        bail!("{} is already running", inst.name);
-    }
     if let Some(t) = state.running_task_for(id) {
         bail!("wait for \"{}\" to finish", t.title);
     }
+    start_inner(state, id).await
+}
+
+/// `start` for a task of this very instance (update, version switch): its own task doesn't block it.
+pub async fn start_from_task(state: &Shared, id: &str) -> Result<()> {
+    start_inner(state, id).await
+}
+
+async fn start_inner(state: &Shared, id: &str) -> Result<()> {
+    let inst = state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
+    // claim the instance before any await, so a double click can't start two servers
+    let claimed = state.with_runtime(id, |r| {
+        if r.status.is_active() {
+            return None;
+        }
+        let prev = r.status;
+        r.status = Status::Starting;
+        r.stop_requested = false;
+        Some(prev)
+    });
+    let Some(prev) = claimed else { bail!("{} is already running", inst.name) };
+    state.notify();
+    let result = start_claimed(state, id, &inst).await;
+    if result.is_err() {
+        // nothing was spawned: back to how it was
+        state.with_runtime(id, |r| {
+            if r.pid.is_none() {
+                r.status = prev;
+            }
+        });
+        state.notify();
+    }
+    result
+}
+
+async fn start_claimed(state: &Shared, id: &str, inst: &InstanceConfig) -> Result<()> {
     if let Some(other) = state.instances.read().iter().find(|o| o.id != id && o.port == inst.port && state.status(&o.id).is_active()) {
         bail!("port {} is used by the running instance \"{}\"", inst.port, other.name);
     }
@@ -208,9 +240,12 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
     }
     let dir = state.paths.server_dir(id);
     let Launch { java, args, env, notes } = match inst.game {
-        Game::Hytale => hytale_launch(state, id, &inst).await?,
-        Game::Minecraft => minecraft_launch(state, id, &inst).await?,
+        Game::Hytale => hytale_launch(state, id, inst).await?,
+        Game::Minecraft => minecraft_launch(state, id, inst).await?,
     };
+    if state.with_runtime(id, |r| r.stop_requested) || state.is_quitting() {
+        bail!("start cancelled");
+    }
 
     let mut cmd = std::process::Command::new(&java);
     cmd.envs(env.iter().map(|(k, v)| (*k, v.as_str())));
@@ -227,7 +262,7 @@ pub async fn start(state: &Shared, id: &str) -> Result<()> {
     }
     let what = match inst.game {
         Game::Hytale => format!("Hytale {}", inst.version),
-        Game::Minecraft => crate::instance::software_label(&inst),
+        Game::Minecraft => crate::instance::software_label(inst),
     };
     state.system_log(id, format!("Starting {} ({what}) on {} port {}", inst.name, inst.game.protocol(), inst.port));
     for n in notes {

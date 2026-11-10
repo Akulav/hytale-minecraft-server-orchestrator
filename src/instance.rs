@@ -234,6 +234,12 @@ pub fn delete(state: &Shared, id: &str, delete_backups: bool) -> Result<()> {
     if state.status(id).is_active() {
         bail!("stop the server first");
     }
+    if let Some(t) = state.running_task_for(id) {
+        bail!("wait for \"{}\" to finish", t.title);
+    }
+    if id.is_empty() || state.instance(id).is_none() {
+        bail!("instance not found");
+    }
     let dir = state.paths.instance_dir(id);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).with_context(|| format!("cannot delete {}", dir.display()))?;
@@ -433,6 +439,7 @@ pub fn add_mod(state: &Shared, id: &str, name: &str, bytes: &[u8]) -> Result<Str
 }
 
 pub fn toggle_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
+    state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
     let dir = mods_dir(state, id);
     let file = base_name(file);
     if file.is_empty() || file.starts_with('.') {
@@ -449,6 +456,7 @@ pub fn toggle_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
 }
 
 pub fn delete_mod(state: &Shared, id: &str, file: &str) -> Result<()> {
+    state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
     let file = base_name(file);
     if file.is_empty() || file.starts_with('.') {
         bail!("invalid mod");

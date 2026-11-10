@@ -51,6 +51,7 @@ pub fn list(state: &Shared, id: &str) -> Vec<BackupInfo> {
 }
 
 fn backup_path(state: &Shared, id: &str, file: &str) -> Result<PathBuf> {
+    state.instance(id).ok_or_else(|| anyhow!("instance not found"))?;
     let name = crate::instance::base_name(file);
     if !name.ends_with(".zip") || name.starts_with('.') {
         bail!("invalid backup");
