@@ -5,6 +5,15 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-10
+### Changed
+- Instances may **share a port**: creating or saving one with the port of another instance is no longer refused.
+  Only starting is checked - a server can't start while another instance of the same game on that port runs.
+  Instance Settings notes which other instances use the same port. A Hytale (UDP) and a Minecraft (TCP) server on
+  the same number never clash.
+- **About → Updates** is laid out properly: Check for updates sits in the panel header, version / last check /
+  status are shown as tiles, and the update notice, errors and notes have room between them.
+
 ## [0.5.1] - 2026-11-10
 ### Fixed
 - 1-click **Update** and version / software switches of a running server now start it again afterwards (the

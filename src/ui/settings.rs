@@ -177,7 +177,18 @@ pub fn AboutPage(tick: u64) -> Element {
     let _ = tick;
     let u = state.updates.read().clone();
     let (s1, s2) = (state.clone(), state.clone());
-    let checked = if u.checked_at > 0 { fmt_time(u.checked_at) } else { "not yet".into() };
+    let checked = if u.checked_at > 0 { fmt_time(u.checked_at) } else { "Not yet".into() };
+    let (status, status_class) = if u.checking {
+        ("Checking…".to_string(), "")
+    } else if let Some(r) = &u.available {
+        (format!("{} available", r.version), "new")
+    } else if !u.error.is_empty() {
+        ("Check failed".to_string(), "bad")
+    } else if u.checked_at > 0 {
+        ("Up to date".to_string(), "ok")
+    } else {
+        ("Not checked yet".to_string(), "")
+    };
 
     rsx! {
         div { class: "page narrow",
@@ -192,16 +203,29 @@ pub fn AboutPage(tick: u64) -> Element {
                     a { class: "btn ghost", href: "https://github.com/Akulav/hytale-server-orchestrator/releases", target: "_blank", rel: "noopener", "Releases" }
                 }
             }
-            div { class: "panel glass",
-                h3 { "Updates" }
-                div { class: "kv",
-                    span { "This version" } b { "{VERSION}" }
-                    span { "Last check" } b { "{checked}" }
+            div { class: "panel glass updates",
+                PanelHead { title: "Updates", icon: Some("download"),
+                    button { class: "btn sm", disabled: u.checking,
+                        onclick: move |_| run_job(&s1, toast, |st| async move {
+                            let u = crate::updater::check(&st).await;
+                            if !u.error.is_empty() { Err(anyhow::anyhow!(u.error)) }
+                            else if let Some(r) = u.available { Ok(format!("Version {} is available", r.version)) }
+                            else { Ok("You have the latest version".into()) }
+                        }),
+                        Icon { name: "refresh" } if u.checking { "Checking…" } else { "Check for updates" }
+                    }
+                }
+                div { class: "update-grid",
+                    div { class: "update-cell", span { "This version" } b { class: "mono", "{VERSION}" } }
+                    div { class: "update-cell", span { "Last check" } b { "{checked}" } }
+                    div { class: "update-cell {status_class}", span { "Status" } b { "{status}" } }
                 }
                 if let Some(rel) = u.available.clone() {
                     Banner { kind: "info", icon: "zap",
-                        b { "Hyve {rel.version} is available. " }
-                        a { href: "{rel.url}", target: "_blank", rel: "noopener", "What's new" }
+                        div { class: "update-title",
+                            b { "Hyve {rel.version} is available" }
+                            a { href: "{rel.url}", target: "_blank", rel: "noopener", "What's new" }
+                        }
                         if !rel.notes.is_empty() { pre { class: "notes", "{rel.notes}" } }
                         div { class: "banner-actions",
                             if u.self_built {
@@ -212,24 +236,14 @@ pub fn AboutPage(tick: u64) -> Element {
                                         crate::state::spawn_task(&s2, "Update Hyve", None, crate::updater::install);
                                         toast.ok("Downloading the update - servers are stopped cleanly before it installs");
                                     },
-                                    if u.installing { "Installing…" } else { "Download & install" }
+                                    Icon { name: "download" } if u.installing { "Installing…" } else { "Download & install" }
                                 }
                             }
                         }
                     }
-                } else if u.checked_at > 0 && u.error.is_empty() {
-                    p { class: "muted", "You have the latest version." }
                 }
-                if !u.error.is_empty() { p { class: "warn-text small", "Last check failed: {u.error}" } }
-                button { class: "btn", disabled: u.checking,
-                    onclick: move |_| run_job(&s1, toast, |st| async move {
-                        let u = crate::updater::check(&st).await;
-                        if !u.error.is_empty() { Err(anyhow::anyhow!(u.error)) }
-                        else if let Some(r) = u.available { Ok(format!("Version {} is available", r.version)) }
-                        else { Ok("You have the latest version".into()) }
-                    }),
-                    Icon { name: "refresh" } if u.checking { "Checking…" } else { "Check for updates" }
-                }
+                if !u.error.is_empty() { Banner { kind: "warn", icon: "alert", "Last check failed: {u.error}" } }
+                p { class: "muted small", "Hyve looks for a new version at start and every 6 hours (Settings → Updates). Servers are stopped cleanly before an update installs." }
             }
             div { class: "panel glass small muted",
                 p { "Hyve is source-available (see LICENSE). Hytale is a trademark of Hypixel Studios; this tool is not affiliated with them. Server files are downloaded with Hypixel's own downloader under your Hytale account." }

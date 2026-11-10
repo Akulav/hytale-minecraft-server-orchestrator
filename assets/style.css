@@ -551,3 +551,17 @@ body.locked { display: grid; place-content: center; min-height: 100vh; padding: 
 .glance-tile b { font-size: 20px; line-height: 1.2; }
 .glance-tile span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .connect-hint { margin-top: auto; padding-top: 14px; }
+/* About → Updates: header action, status tiles, spaced content */
+.panel.updates { gap: 14px; }
+.panel.updates > .panel-head { margin-bottom: 0; }
+.update-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.update-cell { display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.03); min-width: 0; }
+.update-cell > span { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.update-cell > b { font-size: 14px; overflow-wrap: anywhere; }
+.update-cell.ok > b { color: var(--green); }
+.update-cell.new > b { color: var(--cyan); }
+.update-cell.bad > b { color: var(--amber); }
+.update-title { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.banner .notes { margin: 10px 0 0; }
+.panel.updates > p { margin: 0; }
+.field-note { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }

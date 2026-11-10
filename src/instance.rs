@@ -128,9 +128,6 @@ pub fn create_minecraft(state: &Shared, req: NewMinecraft) -> Result<InstanceCon
     if req.port == 0 {
         bail!("pick a port between 1 and 65535");
     }
-    if let Some(other) = port_conflict(state, "", req.port) {
-        bail!("port {} is already used by \"{other}\"", req.port);
-    }
     let inst = InstanceConfig {
         id: crate::state::new_id(),
         name,
@@ -159,8 +156,10 @@ pub fn create_minecraft(state: &Shared, req: NewMinecraft) -> Result<InstanceCon
     Ok(inst)
 }
 
-pub fn port_conflict(state: &Shared, id: &str, port: u16) -> Option<String> {
-    state.instances.read().iter().find(|i| i.id != id && i.port == port).map(|i| i.name.clone())
+/// Other instances of the same game (same protocol) set to `port`. Sharing a port is allowed - only one
+/// of them can run at a time, which `process::start` checks.
+pub fn port_shared_with(state: &Shared, id: &str, game: Game, port: u16) -> Vec<String> {
+    state.instances.read().iter().filter(|i| i.id != id && i.game == game && i.port == port).map(|i| i.name.clone()).collect()
 }
 
 pub fn create(state: &Shared, req: NewInstance) -> Result<InstanceConfig> {
@@ -170,9 +169,6 @@ pub fn create(state: &Shared, req: NewInstance) -> Result<InstanceConfig> {
     }
     if req.port == 0 {
         bail!("pick a port between 1 and 65535");
-    }
-    if let Some(other) = port_conflict(state, "", req.port) {
-        bail!("port {} is already used by \"{other}\"", req.port);
     }
     let inst = InstanceConfig {
         id: crate::state::new_id(),

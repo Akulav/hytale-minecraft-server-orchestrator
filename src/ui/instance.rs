@@ -657,6 +657,7 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
     let dir = state.paths.server_dir(&id);
     let mems = [1024u32, 2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768];
     let hytale = inst.game == Game::Hytale;
+    let shared = instance::port_shared_with(&state, &id, inst.game, f.port).join(", ");
     let java_hint = if hytale {
         "the Java 25 from Settings".to_string()
     } else if inst.java_major > 0 {
@@ -672,6 +673,9 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                 label { class: "field", span { "Name" } input { class: "input", value: "{f.name}", oninput: move |e| form.write().name = e.value() } }
                 label { class: "field", span { "{inst.game.protocol()} port" }
                     input { class: "input", r#type: "number", min: "1", max: "65535", value: "{f.port}", oninput: move |e| if let Ok(p) = e.value().parse() { form.write().port = p } }
+                    if !shared.is_empty() {
+                        small { class: "field-note", "Also set for {shared} - fine, but only one of them can run at a time." }
+                    }
                 }
                 div { class: "row",
                     label { class: "field grow", span { "Min RAM" }
@@ -710,7 +714,6 @@ fn InstanceSettings(id: String, nav: Signal<Page>, tick: u64) -> Element {
                             let r = (|| {
                                 f.name = instance::validate_name(&f.name)?;
                                 if f.port == 0 { anyhow::bail!("pick a port between 1 and 65535"); }
-                                if let Some(other) = instance::port_conflict(&s1, &i1, f.port) { anyhow::bail!("port {} is used by \"{other}\"", f.port); }
                                 if f.min_memory_mb > f.max_memory_mb { f.min_memory_mb = f.max_memory_mb; }
                                 s1.update_instance(&i1, |i| {
                                     i.name = f.name.clone(); i.port = f.port; i.min_memory_mb = f.min_memory_mb; i.max_memory_mb = f.max_memory_mb;

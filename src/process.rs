@@ -232,8 +232,11 @@ async fn start_inner(state: &Shared, id: &str) -> Result<()> {
 }
 
 async fn start_claimed(state: &Shared, id: &str, inst: &InstanceConfig) -> Result<()> {
-    if let Some(other) = state.instances.read().iter().find(|o| o.id != id && o.port == inst.port && state.status(&o.id).is_active()) {
-        bail!("port {} is used by the running instance \"{}\"", inst.port, other.name);
+    // instances may share a port; only one of them runs at a time (Hytale is UDP, Minecraft TCP: no clash)
+    let sharing: Vec<(String, String)> = state.instances.read().iter().filter(|o| o.id != id && o.game == inst.game && o.port == inst.port).map(|o| (o.id.clone(), o.name.clone())).collect();
+    let running_other = sharing.into_iter().find(|(oid, _)| state.status(oid).is_active());
+    if let Some((_, name)) = running_other {
+        bail!("{} port {} is used by \"{name}\", which is running - stop it first, or give this server another port", inst.game.protocol(), inst.port);
     }
     if !port_free(inst.game, inst.port) {
         bail!("{} port {} is in use by another program", inst.game.protocol(), inst.port);
