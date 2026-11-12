@@ -1,14 +1,20 @@
 //! Linux and macOS ship one plain program file, which installs itself: there is no installer package.
 //! The same file is the first install and every update (Windows has `Hyve-setup.exe` for both).
 //!
-//! - **Linux:** `~/.local/share/Hyve/hyve` (data next to it in `data/`), a `~/.local/bin/hyve` link, a menu
-//!   entry (`~/.local/share/applications/hyve.desktop`) and icons in the hicolor theme.
-//! - **macOS:** `~/Applications/Hyve.app` (built here: program, Info.plist, icon, ad-hoc signature); data in
-//!   `~/Library/Application Support/Hyve/data`. An existing `/Applications/Hyve.app` counts as installed.
+//! The user picks the **install folder**; the program *and all its data* (`data/`: servers, versions,
+//! backups, Java, logs) live there:
 //!
+//! - **Linux:** `<folder>/hyve` + `<folder>/data` (default `~/.local/share/Hyve`), a `~/.local/bin/hyve` link,
+//!   a menu entry (`~/.local/share/applications/hyve.desktop`) and an icon in the hicolor theme.
+//! - **macOS:** `<folder>/Hyve.app` (built here: program, Info.plist, icon, ad-hoc signature) + `<folder>/data`
+//!   (default `~/Applications/Hyve`). Before 0.6.1 the app was `~/Applications/Hyve.app` with its data in
+//!   `~/Library/Application Support/Hyve/data`; installing over it moves both into the folder.
+//!
+//! The folder is remembered (`<config dir>/Hyve/install-dir`) so a newer download can offer to update it.
 //! Started from anywhere else (e.g. Downloads) in desktop mode, Hyve offers to install itself - or to update
-//! an installed copy that is older. `hyve --install` does it from a terminal, `hyve --uninstall
-//! [--delete-data]` removes it again. Updates later swap the installed program in place (updater.rs).
+//! an installed copy that is older. `hyve --install [--install-dir <folder>]` does it from a terminal,
+//! `hyve --uninstall [--delete-data]` removes it again. Updates later swap the installed program in place
+//! (updater.rs).
 
 use anyhow::{Result, bail};
 #[cfg(unix)]
@@ -29,17 +35,46 @@ const INFO_PLIST: &str = include_str!("../installer/Info.plist");
 pub struct Offer {
     /// version of the installed copy when this is an update
     pub installed: Option<String>,
-    /// where it goes (the program, or the .app on macOS)
+    /// the install folder (editable in the dashboard for a new install)
     pub target: PathBuf,
 }
 
-/// Linux: `~/.local/share/Hyve`; macOS: the `Hyve.app` that is installed, else `~/Applications/Hyve.app`.
-pub fn install_root() -> Option<PathBuf> {
+/// One line holding the install folder.
+fn pointer_file() -> Option<PathBuf> {
+    Some(dirs::config_dir()?.join(APP_NAME).join("install-dir"))
+}
+
+fn remembered_folder() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(pointer_file()?).ok()?;
+    let t = text.trim();
+    (!t.is_empty()).then(|| PathBuf::from(t))
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn remember(folder: &Path) {
+    if let Some(f) = pointer_file() {
+        if let Some(d) = f.parent() {
+            let _ = std::fs::create_dir_all(d);
+        }
+        let _ = std::fs::write(f, folder.to_string_lossy().as_bytes());
+    }
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
+fn forget() {
+    if let Some(f) = pointer_file() {
+        let _ = std::fs::remove_file(&f);
+        if let Some(d) = f.parent() {
+            let _ = std::fs::remove_dir(d);
+        }
+    }
+}
+
+/// The suggested install folder: Linux `~/.local/share/Hyve` (also where versions before 0.6.1 installed),
+/// macOS `~/Applications/Hyve`.
+pub fn default_folder() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
-        let home = dirs::home_dir()?;
-        let user = home.join("Applications").join(format!("{APP_NAME}.app"));
-        let system = PathBuf::from("/Applications").join(format!("{APP_NAME}.app"));
-        Some(if !user.exists() && system.exists() { system } else { user })
+        Some(dirs::home_dir()?.join("Applications").join(APP_NAME))
     } else if cfg!(target_os = "linux") {
         Some(dirs::data_local_dir()?.join(APP_NAME))
     } else {
@@ -47,10 +82,50 @@ pub fn install_root() -> Option<PathBuf> {
     }
 }
 
+/// macOS before 0.6.1: `~/Applications/Hyve.app` or `/Applications/Hyve.app`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn legacy_bundle() -> Option<PathBuf> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let user = dirs::home_dir()?.join("Applications").join(format!("{APP_NAME}.app"));
+    let system = PathBuf::from("/Applications").join(format!("{APP_NAME}.app"));
+    [user, system].into_iter().find(|a| a.join("Contents").join("MacOS").join("hyve").is_file())
+}
+
+/// The program inside an install folder.
+pub fn exe_in(folder: &Path) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        folder.join(format!("{APP_NAME}.app")).join("Contents").join("MacOS").join("hyve")
+    } else {
+        folder.join("hyve")
+    }
+}
+
+/// The install folder: the remembered one, else the default one when an older install exists there.
+pub fn install_folder() -> Option<PathBuf> {
+    remembered_folder().or_else(|| {
+        let d = default_folder()?;
+        (exe_in(&d).is_file() || legacy_bundle().is_some()).then_some(d)
+    })
+}
+
+/// Is `dir` the (remembered) Linux/macOS install folder?
+pub fn is_install_folder(dir: &Path) -> bool {
+    !cfg!(windows) && install_folder().is_some_and(|f| same_file(&f, dir))
+}
+
 /// The installed program file.
 pub fn installed_exe() -> Option<PathBuf> {
-    let root = install_root()?;
-    Some(if cfg!(target_os = "macos") { root.join("Contents").join("MacOS").join("hyve") } else { root.join("hyve") })
+    if let Some(f) = remembered_folder() {
+        return Some(exe_in(&f));
+    }
+    let d = default_folder()?;
+    let exe = exe_in(&d);
+    if exe.is_file() {
+        return Some(exe);
+    }
+    legacy_bundle().map(|a| a.join("Contents").join("MacOS").join("hyve")).or(Some(exe))
 }
 
 fn same_file(a: &Path, b: &Path) -> bool {
@@ -91,14 +166,37 @@ pub fn check() -> Option<Offer> {
     if crate::updater::self_built(&exe) || is_installed_copy(&exe) {
         return None;
     }
-    let target = install_root()?;
-    let installed_exe = installed_exe()?;
-    if installed_exe.is_file() {
+    if let Some(installed_exe) = installed_exe().filter(|e| e.is_file()) {
         // an installed copy exists: only offer when this one is newer
+        let target = install_folder().or_else(default_folder)?;
         let v = version_of(&installed_exe).unwrap_or_else(|| "0".into());
         return crate::updater::newer(VERSION, &v).then_some(Offer { installed: Some(v), target });
     }
-    Some(Offer { installed: None, target })
+    Some(Offer { installed: None, target: install_folder().or_else(default_folder)? })
+}
+
+/// Check a folder typed into the install banner. `~` means the home folder.
+pub fn parse_folder(text: &str) -> Result<PathBuf> {
+    let text = text.trim();
+    if text.is_empty() {
+        bail!("choose a folder");
+    }
+    let path = match text.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => {
+            dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no home folder"))?.join(rest.trim_start_matches('/'))
+        }
+        _ => PathBuf::from(text),
+    };
+    if !path.is_absolute() {
+        bail!("use a full path, for example ~/Servers/Hyve");
+    }
+    if path.parent().is_none() {
+        bail!("pick a folder, not the root of a disk");
+    }
+    if path.is_file() {
+        bail!("that is a file, not a folder");
+    }
+    Ok(path)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -123,14 +221,13 @@ fn linux_paths() -> Result<(PathBuf, PathBuf, PathBuf, PathBuf)> {
 }
 
 #[cfg(target_os = "linux")]
-fn install_files(exe: &Path) -> Result<PathBuf> {
+fn install_files(exe: &Path, folder: &Path) -> Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
-    let root = install_root().ok_or_else(|| anyhow!("no home folder"))?;
-    let target = installed_exe().ok_or_else(|| anyhow!("no home folder"))?;
-    std::fs::create_dir_all(&root)?;
+    let target = exe_in(folder);
+    std::fs::create_dir_all(folder).with_context(|| format!("cannot create {}", folder.display()))?;
     // copy next to it first, then rename: a running installed copy keeps its old file
-    let tmp = root.join("hyve.new");
-    std::fs::copy(exe, &tmp).with_context(|| format!("cannot copy the program to {}", root.display()))?;
+    let tmp = folder.join("hyve.new");
+    std::fs::copy(exe, &tmp).with_context(|| format!("cannot copy the program to {}", folder.display()))?;
     std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
     std::fs::rename(&tmp, &target)?;
     let (link, entry, icons, share) = linux_paths()?;
@@ -152,13 +249,14 @@ fn install_files(exe: &Path) -> Result<PathBuf> {
     std::fs::write(icon.join("hyve.png"), ICON_256)?;
     let _ = std::process::Command::new("update-desktop-database").arg(share.join("applications")).output();
     let _ = std::process::Command::new("gtk-update-icon-cache").args(["-f", "-t"]).arg(&icons).output();
+    remember(folder);
     Ok(target)
 }
 
 #[cfg(target_os = "linux")]
 fn uninstall_files(delete_data: bool) -> Result<Vec<String>> {
     let mut done = Vec::new();
-    let root = install_root().ok_or_else(|| anyhow!("no home folder"))?;
+    let Some(root) = install_folder() else { return Ok(done) };
     let (link, entry, icons, _) = linux_paths()?;
     if std::fs::read_link(&link).is_ok_and(|t| t.starts_with(&root)) {
         std::fs::remove_file(&link)?;
@@ -170,10 +268,12 @@ fn uninstall_files(delete_data: bool) -> Result<Vec<String>> {
             done.push(f.display().to_string());
         }
     }
-    if delete_data && root.exists() {
-        std::fs::remove_dir_all(&root)?;
-        done.push(root.display().to_string());
+    forget();
+    if delete_data && root.join("data").exists() {
+        std::fs::remove_dir_all(root.join("data"))?;
+        done.push(root.join("data").display().to_string());
     }
+    let _ = std::fs::remove_dir(&root);
     Ok(done)
 }
 
@@ -205,11 +305,11 @@ pub fn icns() -> Vec<u8> {
 }
 
 #[cfg(target_os = "macos")]
-fn install_files(exe: &Path) -> Result<PathBuf> {
+fn install_files(exe: &Path, folder: &Path) -> Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
-    let app = install_root().ok_or_else(|| anyhow!("no home folder"))?;
+    let app = folder.join(format!("{APP_NAME}.app"));
     let contents = app.join("Contents");
-    std::fs::create_dir_all(contents.join("MacOS"))?;
+    std::fs::create_dir_all(contents.join("MacOS")).with_context(|| format!("cannot create {}", app.display()))?;
     std::fs::create_dir_all(contents.join("Resources"))?;
     let target = contents.join("MacOS").join("hyve");
     let tmp = contents.join("MacOS").join("hyve.new");
@@ -221,29 +321,47 @@ fn install_files(exe: &Path) -> Result<PathBuf> {
     // a downloaded file is quarantined: the app made from it must not be
     let _ = std::process::Command::new("xattr").args(["-dr", "com.apple.quarantine"]).arg(&app).output();
     let _ = std::process::Command::new("codesign").args(["--force", "--deep", "--sign", "-"]).arg(&app).output();
+    // the pre-0.6.1 layout: its data comes along, the old app goes
+    let data = folder.join("data");
+    let old_data = crate::state::Paths::user_root();
+    if !data.exists() && old_data.is_dir() {
+        let _ = crate::state::move_tree(&old_data, &data);
+    }
+    if let Some(old_app) = legacy_bundle().filter(|a| !same_file(a, &app)) {
+        let _ = std::fs::remove_dir_all(old_app);
+    }
+    remember(folder);
     Ok(target)
 }
 
 #[cfg(target_os = "macos")]
 fn uninstall_files(delete_data: bool) -> Result<Vec<String>> {
     let mut done = Vec::new();
-    let app = install_root().ok_or_else(|| anyhow!("no home folder"))?;
-    if app.join("Contents").join("MacOS").join("hyve").is_file() {
-        std::fs::remove_dir_all(&app)?;
-        done.push(app.display().to_string());
-    }
-    if delete_data && let Some(base) = dirs::data_local_dir() {
-        let data = base.join(APP_NAME);
-        if data.exists() {
-            std::fs::remove_dir_all(&data)?;
-            done.push(data.display().to_string());
+    let folder = install_folder();
+    let apps = folder.iter().map(|f| f.join(format!("{APP_NAME}.app"))).chain(legacy_bundle());
+    for app in apps {
+        if app.join("Contents").join("MacOS").join("hyve").is_file() {
+            std::fs::remove_dir_all(&app)?;
+            done.push(app.display().to_string());
         }
+    }
+    forget();
+    if delete_data {
+        for data in folder.iter().map(|f| f.join("data")).chain([crate::state::Paths::user_root()]) {
+            if data.exists() {
+                std::fs::remove_dir_all(&data)?;
+                done.push(data.display().to_string());
+            }
+        }
+    }
+    if let Some(f) = folder {
+        let _ = std::fs::remove_dir(f);
     }
     Ok(done)
 }
 
 #[cfg(not(unix))]
-fn install_files(_exe: &Path) -> Result<PathBuf> {
+fn install_files(_exe: &Path, _folder: &Path) -> Result<PathBuf> {
     bail!("on Windows, Hyve-setup.exe installs and updates Hyve")
 }
 
@@ -256,37 +374,33 @@ fn uninstall_files(_delete_data: bool) -> Result<Vec<String>> {
 // Doing it
 // ---------------------------------------------------------------------------------------------
 
-/// Where the installed copy keeps its data (`Paths::default_root` for it).
-fn installed_data() -> Option<PathBuf> {
-    Some(crate::state::Paths::user_root())
-}
-
 /// Data this copy made next to itself (`<folder>/data`, e.g. in Downloads) moves along with the install,
 /// when the installed copy has none yet.
-fn move_data_along(exe: &Path) -> Option<String> {
+fn move_data_along(exe: &Path, folder: &Path) -> Option<String> {
     let here = exe.parent()?.join("data");
-    let there = installed_data()?;
+    let there = folder.join("data");
     if !here.is_dir() || there.exists() || same_file(&here, &there) {
         return None;
     }
-    if let Some(p) = there.parent() {
-        let _ = std::fs::create_dir_all(p);
-    }
-    Some(match std::fs::rename(&here, &there) {
+    Some(match crate::state::move_tree(&here, &there) {
         Ok(()) => format!("moved the data from {} to {}", here.display(), there.display()),
         Err(e) => format!("the data stays in {} ({e}); start the installed Hyve with --data-dir to use it", here.display()),
     })
 }
 
-/// `hyve --install` (terminal): installs this program for the user. Returns what was done.
-pub fn install_cli() -> Result<String> {
+/// `hyve --install [--install-dir <folder>]` (terminal): installs this program for the user.
+pub fn install_cli(folder: Option<PathBuf>) -> Result<String> {
     let exe = std::env::current_exe()?;
     if is_installed_copy(&exe) {
         bail!("this is already the installed copy ({})", exe.display());
     }
-    let target = install_files(&exe)?;
-    let mut msg = format!("Hyve {VERSION} is installed: {}", target.display());
-    if let Some(note) = move_data_along(&exe) {
+    let folder = match folder {
+        Some(f) => parse_folder(&f.to_string_lossy())?,
+        None => install_folder().or_else(default_folder).ok_or_else(|| anyhow::anyhow!("no home folder"))?,
+    };
+    let target = install_files(&exe, &folder)?;
+    let mut msg = format!("Hyve {VERSION} is installed: {} (its data goes to {})", target.display(), folder.join("data").display());
+    if let Some(note) = move_data_along(&exe, &folder) {
         msg.push_str(&format!("\n{note}"));
     }
     if cfg!(target_os = "linux") {
@@ -297,27 +411,37 @@ pub fn install_cli() -> Result<String> {
 
 /// `hyve --uninstall [--delete-data]`.
 pub fn uninstall_cli(delete_data: bool) -> Result<String> {
+    let data = install_folder().map(|f| f.join("data"));
     let done = uninstall_files(delete_data)?;
     Ok(if done.is_empty() {
         "Hyve is not installed for this user - nothing to remove.".to_string()
     } else {
-        let keep = if delete_data { String::new() } else { format!("\nYour servers and data stay in {} (add --delete-data to remove them).", crate::state::Paths::user_root().display()) };
+        let keep = match (&data, delete_data) {
+            (Some(d), false) => format!("\nYour servers and data stay in {} (add --delete-data to remove them).", d.display()),
+            _ => String::new(),
+        };
         format!("Removed:\n  {}{keep}", done.join("\n  "))
     })
 }
 
-/// The dashboard's Install / Update button: installs, then starts the installed copy and ends this one.
+/// The dashboard's Install / Update button: installs into the offered folder, then starts the installed copy
+/// and ends this one.
 pub async fn install_task(state: crate::state::Shared, task: String) -> Result<String> {
     let exe = std::env::current_exe()?;
+    let folder = state.install_offer.read().as_ref().map(|o| o.target.clone());
+    let folder = match folder {
+        Some(f) => parse_folder(&f.to_string_lossy())?,
+        None => install_folder().or_else(default_folder).ok_or_else(|| anyhow::anyhow!("no home folder"))?,
+    };
     state.task_update(&task, Some("Stopping servers…"), None);
     crate::process::stop_all(&state).await;
     state.task_update(&task, Some("Installing…"), None);
-    let e2 = exe.clone();
-    let target = tokio::task::spawn_blocking(move || install_files(&e2)).await??;
+    let (e2, f2) = (exe.clone(), folder.clone());
+    let target = tokio::task::spawn_blocking(move || install_files(&e2, &f2)).await??;
     state.task_log(&task, format!("Installed {}", target.display()));
     // data next to this copy moves along only when it is the folder in use
     if exe.parent().is_some_and(|d| same_file(&d.join("data"), &state.paths.root))
-        && let Some(note) = move_data_along(&exe)
+        && let Some(note) = move_data_along(&exe, &folder)
     {
         state.task_log(&task, note);
     }
@@ -328,7 +452,7 @@ pub async fn install_task(state: crate::state::Shared, task: String) -> Result<S
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
         st.request_quit();
     });
-    Ok(format!("Installed in {} - starting it", target.display()))
+    Ok(format!("Installed in {} - starting it", folder.display()))
 }
 
 /// Starts the installed copy once this one has ended (its web port is free again).
@@ -387,7 +511,21 @@ mod tests {
         let exe = std::env::temp_dir().join("Downloads-test").join("hyve-linux-x64");
         assert!(!is_installed_copy(&exe));
         if cfg!(target_os = "macos") {
-            assert!(is_installed_copy(Path::new("/Users/u/Applications/Hyve.app/Contents/MacOS/hyve")));
+            assert!(is_installed_copy(Path::new("/Users/u/Applications/Hyve/Hyve.app/Contents/MacOS/hyve")));
+        }
+    }
+
+    #[test]
+    fn checks_typed_folders() {
+        assert!(parse_folder("").is_err());
+        assert!(parse_folder("relative/dir").is_err());
+        if cfg!(unix) {
+            assert_eq!(parse_folder(" /srv/hyve ").unwrap(), PathBuf::from("/srv/hyve"));
+            assert!(parse_folder("~/Servers/Hyve").unwrap().ends_with("Servers/Hyve"));
+            assert_eq!(exe_in(Path::new("/srv/hyve")).file_name().unwrap(), "hyve");
+        } else {
+            assert!(parse_folder(r"C:\").is_err());
+            assert_eq!(parse_folder(r"D:\Servers\Hyve").unwrap(), PathBuf::from(r"D:\Servers\Hyve"));
         }
     }
 }

@@ -47,10 +47,14 @@ The owner wants every change set to ship as a release. For **every** change (fea
   copies read these names (`updater::asset_name`): keep them. No .dmg, no `-headless` build, no legacy-name copies
   (dropped in 0.5; pre-0.4 HyOrchestrator and 0.4 `-headless` copies update by hand once).
 - Linux/macOS install themselves (`selfinstall.rs`): run from outside the install, desktop mode shows a dashboard
-  banner (Install / Update an older install / Just run it); `--install`, `--uninstall [--delete-data]` in a terminal.
-  Linux: `~/.local/share/Hyve/hyve` + `~/.local/bin/hyve` link + `.desktop` + hicolor icon. macOS: builds
-  `~/Applications/Hyve.app` (Info.plist from `installer/Info.plist` with the version, icns from the PNGs, quarantine
-  removed, ad-hoc signed). Installed data = `Paths::user_root()`; data next to a "just run" copy moves along.
+  banner with an **install folder** field (Install / Update an older install / Just run it); `--install
+  [--install-dir <folder>]`, `--uninstall [--delete-data]` in a terminal. The folder is remembered in
+  `<config dir>/Hyve/install-dir`. Linux: `<folder>/hyve` (default `~/.local/share/Hyve`) + `~/.local/bin/hyve` link
+  + `.desktop` + hicolor icon. macOS: builds `<folder>/Hyve.app` (default `~/Applications/Hyve`; Info.plist from
+  `installer/Info.plist` with the version, icns from the PNGs, quarantine removed, ad-hoc signed); a pre-0.6.1
+  `~/Applications/Hyve.app` and its `~/Library/Application Support/Hyve/data` move into the folder. Installed data =
+  `<folder>/data` (owner's rule, like akulav-mc-launcher: **everything in the install folder**); data next to a
+  "just run" copy moves along.
 - Rename (0.4, HyOrchestrator → Hyve): the setup keeps the AppId, removes `hyorchestrator.exe` + old shortcuts
   (`[InstallDelete]`) and stops either process. `Paths::user_root` keeps using an existing `…/HyOrchestrator/data`
   (never moved). The web cookie stays `hyo_token`.
@@ -122,9 +126,11 @@ scripts/        bump-version.ps1, make-icons.ps1
   Forge 47.4.28 / 1.20.1 all install, start ("Done (…)!" → Running), stop and back up.
 
 ## Conventions & gotchas
-- Data folder (`Paths::default_root`): `data/` next to the program; per-user folder for builds from source
-  (`…/target/…`), the macOS bundle, or a read-only program folder. Old per-user data is moved only by an installed
-  copy (uninstaller next to it). Never test that move against the real `%LOCALAPPDATA%\HyOrchestrator\data` or `%LOCALAPPDATA%\Hyve\data`.
+- Data folder (`Paths::default_root`): `data/` in the install folder (next to the program; on macOS next to
+  `Hyve.app`); per-user folder only for builds from source (`…/target/…`), a pre-0.6.1 `Applications/Hyve.app`, or a
+  read-only program folder. Old per-user data is moved only by an installed copy (uninstaller next to it, or the
+  remembered Linux/macOS install folder), across drives too (`state::move_tree` copies when a rename can't).
+  Temporary files go to `data/tmp`, never the system temp folder. Never test that move against the real `%LOCALAPPDATA%\HyOrchestrator\data` or `%LOCALAPPDATA%\Hyve\data`.
 - Server sign-in order: saved Hytale account (token passthrough, no prompt) → else the server's own device prompt
   (auto-started, `/auth persistence Encrypted` after success). Tokens go in env vars, never in logged arguments.
 - Never hold a `parking_lot` guard across `.await`.

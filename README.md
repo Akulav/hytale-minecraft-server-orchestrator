@@ -1,201 +1,180 @@
 <div align="center">
 
-<img src="assets/logo.svg" width="96" alt="">
+<img src="assets/icon.png" alt="Hyve" width="128" height="128">
 
 # Hyve
 
-**Run and manage Hytale and Minecraft servers from one place: a desktop app on your PC, a web panel on your headless server.**
+**Run and manage Hytale and Minecraft servers from one place, made by Akulav.**
 
-Hyve downloads the official Hytale server - or Minecraft Java, vanilla or with Fabric, Quilt, Forge or
-NeoForge - runs as many isolated server instances as your machine handles, and gives you live telemetry, a
-console, worlds with seeds, operators, drag & drop mods, a `server.properties` editor, 1-click updates and
-backups. Written in pure Rust, front to back. One program file per system installs and updates itself.
+A desktop app on your PC, a web panel on your headless server. No telemetry. No bloat. One file per system that installs and updates itself.
+
+[![Latest release](https://img.shields.io/github/v/release/Akulav/hytale-server-orchestrator?style=for-the-badge&label=release&color=e5383b)](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Akulav/hytale-server-orchestrator/total?style=for-the-badge&color=f4b740)](https://github.com/Akulav/hytale-server-orchestrator/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/Akulav/hytale-server-orchestrator/build.yml?branch=main&style=for-the-badge&label=build)](https://github.com/Akulav/hytale-server-orchestrator/actions/workflows/build.yml)
+
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=flat-square&logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-x64-FCC624?style=flat-square&logo=linux&logoColor=black)
+![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon-000000?style=flat-square&logo=apple&logoColor=white)
+![Rust](https://img.shields.io/badge/made%20with-Rust-B7410E?style=flat-square&logo=rust&logoColor=white)
+![License](https://img.shields.io/badge/license-source--available-5c6270?style=flat-square)
+
+### [⬇ Download the latest release](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
 
 <sub>Formerly <i>HyOrchestrator</i> - installed copies update into Hyve by themselves, keeping their folder and data.</sub>
-
-![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4)
-![Linux](https://img.shields.io/badge/Linux-x86--64-f6c915)
-![macOS](https://img.shields.io/badge/macOS-Apple%20Silicon-555555)
-![Pure Rust](https://img.shields.io/badge/pure-Rust-b7410e)
-[![Release](https://img.shields.io/github/v/release/Akulav/hytale-server-orchestrator?include_prereleases&color=7c6cff&label=release)](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/Akulav/hytale-server-orchestrator/build.yml?branch=main&label=build)](https://github.com/Akulav/hytale-server-orchestrator/actions/workflows/build.yml)
-
-[**Download**](https://github.com/Akulav/hytale-server-orchestrator/releases/latest) ·
-[Quick start](#-quick-start) ·
-[Features](#-features) ·
-[Building](#%EF%B8%8F-building-from-source) ·
-[Changelog](CHANGELOG.md)
 
 </div>
 
 ---
 
-## Contents
+## ⬇️ Download
 
-- [Why it's different](#-why-its-different) · [Features](#-features) · [Screenshots](#%EF%B8%8F-screenshots)
-- [Quick start](#-quick-start) · [What you need](#-what-you-need)
-- [Installing, updating and uninstalling](#-installing-updating-and-uninstalling)
-- [Desktop, headless and the command line](#%EF%B8%8F-desktop-headless-and-the-command-line) · [How it works](#%EF%B8%8F-how-it-works)
-- [Tech stack](#-tech-stack) · [Privacy and safety](#-privacy-and-safety)
-- [Building from source](#%EF%B8%8F-building-from-source) · [Versions and releases](#%EF%B8%8F-versions-and-releases) · [Tests](#-tests)
-- [Project layout](#%EF%B8%8F-project-layout) · [Troubleshooting](#-troubleshooting) · [License](#-license)
+One file per system. The same file installs Hyve the first time and updates it later.
 
----
+| Platform | File | Notes |
+| :-- | :-- | :-- |
+| 🪟 **Windows 10 / 11** (x64) | [`Hyve-setup.exe`](https://github.com/Akulav/hytale-server-orchestrator/releases/latest/download/Hyve-setup.exe) | Asks where to install. No admin rights needed. |
+| 🐧 **Linux** (x64) | [`hyve-linux-x64`](https://github.com/Akulav/hytale-server-orchestrator/releases/latest/download/hyve-linux-x64) | Desktop and headless in one; no system libraries needed |
+| 🍎 **macOS** (Apple Silicon) | [`hyve-macos-arm64`](https://github.com/Akulav/hytale-server-orchestrator/releases/latest/download/hyve-macos-arm64) | macOS 11+ |
 
-## ✨ Why it's different
+Every release also ships `SHA256SUMS.txt` so you can verify your download.
 
-|  |  |
-|---|---|
-| 🖥️ **Desktop or headless, same app** | With a screen it opens a window. Over SSH on a Linux box it serves the very same UI as a web panel and prints the link. |
-| 🦀 **Pure Rust** | Backend (tokio, axum) and UI (Dioxus) are Rust. One small program; no Node, no Docker, no Python. |
-| 📦 **Official server files** | Uses Hypixel's own Hytale Downloader CLI under your Hytale account, or the files of your installed launcher. |
-| 🔄 **Keeps everything current** | 1-click server updates (with a backup first) and an in-app updater for Hyve itself. |
-| 🧱 **Isolated instances** | Each server has its own folder, version, port, worlds, mods, operators and backups. |
+## ✨ Features
 
-## 🎀 Features
+<table>
+<tr>
+<td width="50%" valign="top">
 
-| Area | What it does |
-|---|---|
-| **Instances** | Create any number of servers: name, version, port (conflicts are caught), RAM, update channel, offline auth for LAN tests, extra JVM / server arguments, auto-restart after crashes. |
-| **Minecraft** | Java Edition servers next to Hytale ones: any release or snapshot, **vanilla, Fabric, Quilt, Forge or NeoForge** (newest stable / recommended build, or the one you pick). Hyve downloads Mojang's server (SHA-1 checked), runs the loader's installer, and fetches the Java the version needs (8 / 17 / 21 / 25). Every `server.properties` setting in the **Properties** tab - online mode, game mode, difficulty, PvP, whitelist, world type, view distance, RCON… - as switches, menus and numbers, plus any other key. Worlds tab: switch the active world or generate a new one with a seed and world type. |
-| **Versions** | Download the latest `release` or `pre-release` with the official downloader, import from the Hytale launcher or a zip / folder. Every instance can run any cached version and switch up or down. |
-| **Worlds** | Generate any number of worlds per instance with a chosen or random seed (numbers or words), see their size, toggle PvP, delete. |
-| **Players & rights** | Online players read live from the console; make or remove operators (`/op add`, `/op remove`), kick. |
-| **Mods** | Drag & drop `.jar` / `.zip` mods onto an instance (or pick files), enable / disable with a switch, remove. |
-| **Telemetry** | Machine CPU and RAM, and per server CPU, RAM, players online and uptime, with live charts. |
-| **Console** | Live output with a filter, a command line, quick commands, clickable Hytale login links and a login helper. |
-| **Updates** | 1-click: backup → download the latest server of the instance's channel → swap → restart. |
-| **Backups** | "World + mods" zips (universe, mods, config, permissions, whitelist, bans), labelled, restorable in one click with a safety backup first. |
-| **Java** | Detects Java 25 and installs Eclipse Temurin 25 in one click if it is missing. |
-| **Comfort** | Dark glass UI, task list with progress and logs, `/api/status` JSON for your own scripts, "Made by Akulav". |
+### 🎮 Servers
+- **Hytale** (official files via Hypixel's downloader or your launcher) and **Minecraft Java**: vanilla,
+  **Fabric, Quilt, Forge, NeoForge**.
+- Any number of isolated instances: own folder, version, port, RAM, worlds with seeds, mods, operators.
+- Live console with commands, sign-in helper and a `server.properties` editor.
 
-## 🖼️ Screenshots
+</td>
+<td width="50%" valign="top">
 
-> [!NOTE]
-> Screenshots are coming with the first release (they go in `docs/`): the dashboard with live machine and
-> server telemetry, an instance's overview / console / worlds / mods tabs, and the headless banner.
+### 🧰 Manage
+- **1-click server updates** with a backup first; switch versions up or down.
+- World + mods **backups**, restorable in one click (with a safety backup first).
+- Drag & drop mods, enable / disable with a switch; Java installed for you when missing.
 
-| Page | What you see |
-|---|---|
-| **Dashboard** | Machine CPU / RAM charts, servers running, players online, one live card per instance with Start / Stop |
-| **Instance** | Status, Stop / Restart / Kill / Update / Back up, tabs: Overview · Console · Worlds · Players · Mods · (Minecraft: Properties) · Backups · Settings |
-| **Server versions** | Downloader buttons, launcher import, zip / folder import, the version cache |
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
 
-## 🚀 Quick start
+### ⚡ Fast & light
+- Pure Rust front to back (tokio, axum, Dioxus). No Node, no Docker, no Python.
+- **Desktop or headless, same app**: with a screen it opens a window; over SSH it serves the UI as a web panel.
+- Live machine and per-server CPU, RAM and player charts.
 
-1. **Download** the file for your system from the [latest release](https://github.com/Akulav/hytale-server-orchestrator/releases/latest)
-   and install it (see [below](#-installing-updating-and-uninstalling)).
-2. **Start Hyve.** No Java 25? Click **Install Java 25 (Temurin)** on the dashboard.
-3. **Server versions → Latest release.** Hyve fetches Hypixel's official downloader by itself. The first
-   time a **Sign in to Hytale** card appears with a code: click **Open sign-in page** (the desktop app opens it for
-   you), approve with the account that owns Hytale, and the download continues by itself. No token to paste; the
-   login is saved. (Or **Import** the files of your installed Hytale launcher.)
-4. **New instance** → name, version, port, seed → **Create** → **Start**.
-5. **Settings → Hytale account → Sign in** once (also step 3 of *Get started* on the dashboard). From then on every
-   server starts already signed in - no code per server or per start. (Skip it and each server asks for its own
-   code, which Hyve also shows as a card.) Players join on the address in **Connect** (Copy buttons for
-   local and internet), UDP.
+</td>
+<td width="50%" valign="top">
 
-**Minecraft instead?** New instance → **Minecraft** → software (Vanilla, Fabric, Quilt, Forge, NeoForge), version,
-port, world settings, accept the EULA → **Create**. Hyve installs it in the background (Tasks shows progress);
-then **Start**. No Hytale account, downloader or Java setup needed.
+### 🔄 Always up to date
+- **You choose the install folder** once; Hyve and all its servers, versions and backups live there.
+- **One-click updates** from GitHub, verified with SHA-256, into the same folder.
+- Checks at start and every 6 hours (can be turned off in Settings).
 
-> [!TIP]
-> On a Linux server without a display, just run `./hyve-linux-x64`: it prints a link like
-> `http://192.168.1.20:7520/?token=…`. Open it from any browser on your network.
+</td>
+</tr>
+</table>
 
-## 🧰 What you need
+## 🚀 Getting started
 
-| | Minimum | Comfortable |
-|---|---|---|
-| **RAM** | 4 GB per Hytale server (Hypixel's figure) + ~100 MB for Hyve | 8 GB+ per busy server |
-| **Disk** | ~4 GB per server version + your worlds and backups | an SSD |
-| **Java** | Java 25 (installed for you on request); Minecraft servers get the Java of their version automatically | |
-| **OS** | Windows 10/11 x64; Linux x86-64 (nothing extra; the desktop window uses Chrome / Chromium / Edge / Brave if installed, else your browser); macOS 11+ on Apple Silicon | |
-| **Network** | Internet for downloads; port forwarding for players outside your network (Hytale UDP, Minecraft TCP) | |
+### Windows
+1. Download **`Hyve-setup.exe`** and run it.
+2. Pick the install folder (default `%LOCALAPPDATA%\Hyve`, any folder you can write to works, e.g. `D:\Servers\Hyve`).
+   It adds Start-menu and (optional) Desktop shortcuts and an entry in *Settings → Apps*.
+3. Updates install into the same folder without asking: in-app with one click, or by running a newer setup.
 
-## 📦 Installing, updating and uninstalling
+Uninstall from *Settings → Apps*. The uninstaller asks whether to keep your servers, worlds and backups.
 
-Each release has exactly one file per system - the same file installs Hyve the first time and updates it later -
-plus `SHA256SUMS.txt`.
-
-| System | File | Where it lives | Shortcuts |
-|---|---|---|---|
-| Windows | `Hyve-setup.exe`: a wizard with a license page, a **folder you can change** and a **desktop icon** choice; per user, no admin rights | the folder you pick (default `%LOCALAPPDATA%\Hyve`); servers, worlds and backups in its `data\` | Start menu (+ "headless web UI"), desktop, *Settings → Apps* |
-| macOS | `hyve-macos-arm64`: run it once; it offers to install **`~/Applications/Hyve.app`** (built, signed ad hoc and opened for you) | data in `~/Library/Application Support/Hyve/data` (never inside the app) | Applications, Launchpad |
-| Linux | `hyve-linux-x64`: `chmod +x` and run; with a display it offers to install for your user (or `hyve-linux-x64 --install` over SSH) | `~/.local/share/Hyve/hyve`, data in `~/.local/share/Hyve/data` (not installed: `data/` next to the program) | app menu entry + icon, `~/.local/bin/hyve` |
-
-Not installing is fine too (**Just run it**): the program then keeps its data next to itself. A newer download run
-next to an older install offers to update it. A Mac may refuse a downloaded program at first: run
-`xattr -d com.apple.quarantine hyve-macos-arm64` (or right-click → *Open*); the installed app is cleared of that flag.
-
-Everything Hyve keeps - instances, worlds, mods, server versions, backups, Java, settings - is in that one
-`data` folder next to the program; `--data-dir <path>` puts it anywhere else. Data from versions before 0.3
-(`%LOCALAPPDATA%\Hyve\data`) is moved next to an installed program on its first start when both are
-on the same drive.
-
-**Updating.** Hyve checks GitHub 15 seconds after it starts and every 6 hours (Settings can turn that
-off), or when you press **About → Check for updates**. **Download & install** fetches this system's file, checks it
-against the release's `SHA256SUMS.txt` (a mismatch changes nothing), stops your servers cleanly and then:
-
-- **Windows:** runs `Hyve-setup.exe` silently on your install folder; it replaces the program and starts it.
-  Running a newer setup by hand also finds the previous install folder by itself.
-- **Linux / macOS:** swaps the program in place (the old one is kept until the next start) and starts it again
-  with the same options.
-
-| Written by an update | Never touched |
-|---|---|
-| The program (and on Windows its shortcuts and Apps entry) | `data/`: instances, worlds, mods, versions, backups, Java, settings |
-
-**Uninstalling.** Windows: *Settings → Apps → Hyve*; it asks whether to delete the data too (default:
-keep). macOS / Linux: `hyve --uninstall` removes the program, menu entry, icon and link; add `--delete-data` to also
-remove servers, worlds and backups.
-
-## 🛰️ Desktop, headless and the command line
-
-Hyve always runs a small web server for its UI. With a display it shows that UI in a window (bound to
-`127.0.0.1` only): a native one on Windows and macOS; on Linux a Chrome / Chromium / Edge / Brave **app window**
-(no tabs or address bar - closing it quits Hyve), or a tab in your default browser if none of those is installed
-(then **Quit Hyve** is in the sidebar). Without a display (Linux with no `DISPLAY` / `WAYLAND_DISPLAY`, a Mac over SSH, or
-`--headless`) it listens on all interfaces and prints:
-
+### Linux
+```bash
+chmod +x hyve-linux-x64
+./hyve-linux-x64
 ```
- ────────────────────────────────────────────────────────────────────
-  Hyve 0.1.0 · Made by Akulav
-  Headless mode: the web UI is served here instead of a window.
- ────────────────────────────────────────────────────────────────────
-  Local:    http://127.0.0.1:7520/?token=4f9c…
-  Network:  http://192.168.1.20:7520/?token=4f9c…
- ────────────────────────────────────────────────────────────────────
+With a display it asks for an install folder (default `~/.local/share/Hyve`), copies itself there and adds an app-menu
+entry with icon and a `hyve` terminal command. *Just run it* skips installing. Over SSH:
+`./hyve-linux-x64 --install --install-dir /srv/hyve`. Without a display it prints a link like
+`http://192.168.1.20:7520/?token=…` to open from any browser on your network.
+Running a newer download later offers to update the installed copy in its folder.
+Uninstall with `hyve --uninstall` (add `--delete-data` to remove servers and backups too).
+
+### macOS (Apple Silicon)
+```bash
+chmod +x hyve-macos-arm64
+xattr -d com.apple.quarantine hyve-macos-arm64
+./hyve-macos-arm64
 ```
+It asks for an install folder (default `~/Applications/Hyve`) and creates `Hyve.app` there.
 
-Every page needs the token (it becomes a cookie after the first visit). In the desktop window, **Open in browser**
-in the sidebar opens the same UI in your browser.
+### Your first server
+1. **Hytale:** *Server versions → Latest release* (sign in once with the account that owns Hytale), then
+   **New instance → Create → Start**. *Settings → Hytale account → Sign in* once and every server starts signed in.
+2. **Minecraft:** **New instance → Minecraft**, pick the software and version, accept the EULA → **Create → Start**.
+3. Players join on the address in **Connect** (Hytale: UDP, Minecraft: TCP).
 
-| Option | |
-|---|---|
-| `--headless` | web UI only (default without a display) |
-| `--desktop` | force the window |
-| `--port <n>` | web UI port (default `7520`, or Settings) |
-| `--host <ip>` | listen address (headless `0.0.0.0`, desktop `127.0.0.1`) |
-| `--data-dir <path>` | where instances, versions and backups live |
-| `--print-url` | print the access links and quit |
-| `--install` | Linux / macOS: install this program for your user |
-| `--uninstall [--delete-data]` | Linux / macOS: remove it (and the data) |
+## 📁 Where your data lives
+
+**In the install folder you chose**, in `data/` next to the program. Install on `D:\Servers\Hyve` and every server,
+world, version, backup and Java runtime goes to `D:\Servers\Hyve\data`. The folder is remembered (Windows: by the
+setup; Linux/macOS: in `~/.config/Hyve/install-dir` or `~/Library/Application Support/Hyve/install-dir`), so updates
+keep everything in place. Data from older versions (`%LOCALAPPDATA%\Hyve\data`, `~/Library/Application Support/Hyve/data`)
+is moved in, also when the install folder is on another drive.
+
+| Path | Contents |
+| :-- | :-- |
+| `data/settings.json`, `data/instances.json` | settings and the list of servers |
+| `data/instances/<id>/` | each server's folder (worlds, mods, configs) |
+| `data/versions/`, `data/minecraft/` | cached Hytale versions and Minecraft server jars |
+| `data/backups/` | world + mods backups |
+| `data/java*/` | Java runtimes Hyve installed |
+| `data/logs/`, `data/tmp/`, `data/updates/` | logs, temporary files, a downloaded update |
+| `data/hytale-account.json` | saved Hytale sign-in (owner-only on Linux/macOS) |
+
+`--data-dir <path>` puts the data anywhere else (e.g. for a systemd service).
+
+## 🖥️ Command line
+
+| Flag | Meaning |
+| :-- | :-- |
+| `--headless` | Web UI only (default without a display) |
+| `--desktop` | Force the window |
+| `--port <n>` / `--host <ip>` | Web UI port (default `7520`) and listen address |
+| `--data-dir <path>` | Where instances, versions and backups live |
+| `--print-url` | Print the access links and quit |
+| `--install [--install-dir <path>]` | Linux / macOS: install into a folder (default as above) |
+| `--uninstall [--delete-data]` | Linux / macOS: remove the program (and the data) |
 | `--version`, `--help` | |
 
 Run it as a service on Linux, for example with systemd:
 
 ```ini
 [Service]
-ExecStart=/opt/hyve/hyve-linux-x64 --headless --data-dir /srv/hyve
+ExecStart=/srv/hyve/hyve --headless
 User=hytale
 Restart=on-failure
 KillSignal=SIGTERM
 TimeoutStopSec=90
 ```
 
-## 🏗️ How it works
+## 🩺 Troubleshooting
+
+| Problem | What to do |
+| :-- | :-- |
+| "Java 25 or newer is required" | Dashboard or Settings → **Install Java 25 (Temurin)**, or set the path to your own Java 25. |
+| Players can't connect | Forward / allow **UDP** (Hytale) or **TCP** (Minecraft) on the instance's port. Check the **Log in** banner: an unauthenticated Hytale server rejects players. |
+| The sign-in code expired | Start the download again (or **Sign in again** for a server): a new code appears. |
+| Downloader on a Mac | Hypixel ships it for Windows and Linux only: use **Import from your Hytale launcher**. |
+| Linux: the UI opens as a browser tab | Install Chrome, Chromium, Edge or Brave for a separate app window, or use **Quit Hyve** in the sidebar. |
+| Forgot the web link | `hyve --print-url`, or Settings → Web UI in the desktop window. |
+
+<details>
+<summary><b>🛠️ For maintainers: how it works, updates and releases</b></summary>
+
+### How it works
 
 ```mermaid
 flowchart LR
@@ -206,137 +185,68 @@ flowchart LR
     Core -. downloads .-> DL["Hytale Downloader CLI · Mojang · Fabric / Quilt / Forge / NeoForge<br/>Temurin · GitHub releases"]
 ```
 
-- **The UI** is a Dioxus component tree rendered on the server (LiveView): the browser or the window only shows it
-  over a WebSocket. Drag & drop uploads go straight to `POST /api/instances/<id>/mods`.
-- **A server** is `java [-Xms -Xmx -XX:AOTCache] -jar HytaleServer.jar --assets <version>/Assets.zip --bind 0.0.0.0:<port>`
-  in its instance folder, with `HYTALE_DISABLE_UPDATES=1` (Hyve handles updates). Commands go to its
-  stdin; players, login prompts and the boot line are read from its output. **Stop** sends `/stop` and waits up to
-  45 s before killing it.
-- **Versions** live once in `data/versions/<version>` (`Server/` + `Assets.zip`); each instance copies `Server/` and
-  points `--assets` at the shared Assets.zip.
-- **A Minecraft server** is `java [-Xms -Xmx] <launch> nogui` in its instance folder, where `<launch>` is
-  `-jar server.jar` (vanilla), `-jar fabric-server-launch.jar` / `quilt-server-launch.jar`, or Forge / NeoForge's
-  `@libraries/…/win_args.txt` (`unix_args.txt`) as their installer writes it. Stop sends `stop`; players are read
-  from the `joined the game` / `left the game` lines. Mojang's server jars are cached in `data/minecraft/`, extra
-  Java versions in `data/java-<n>/`.
+The UI is a Dioxus component tree rendered on the server (LiveView); the window or browser only shows it over a
+WebSocket guarded by a random 256-bit token. Each server is a `java` process in its instance folder; commands go to
+its stdin, players and sign-in prompts are read from its output.
 
-## 🦀 Tech stack
+### Publishing a release
 
-| Layer | Crates / tools |
-|---|---|
-| Runtime | `tokio` |
-| Web server / API | `axum` (WebSocket, multipart) |
-| UI | `dioxus` 0.7 + `dioxus-liveview` (Rust components rendered server-side) |
-| Desktop window | `tao` + `wry` (WebView2 / WKWebView), `muda` (macOS menu); Linux: a Chromium-family `--app` window |
-| Processes | `std::process::Command` (driven through `tokio::process`) |
-| Telemetry | `sysinfo` |
-| Data | `serde`, `serde_json` (settings, instances), `zip` (backups, downloads) |
-| Downloads & updates | `reqwest` (rustls), `sha2` |
-| Packaging | Inno Setup 6 (Windows); the Linux / macOS program installs itself (menu entry, `.app`); GitHub Actions |
+Releases are fully automated by [`.github/workflows/build.yml`](.github/workflows/build.yml):
 
-## 🔒 Privacy and safety
+1. Note changes under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md), then `scripts\bump-version.ps1`
+   (`patch`, `minor`, `major` or `1.2.3`; it updates `Cargo.toml`, `Cargo.lock`, the setup script and `Info.plist`).
+2. Push to `main`.
+3. If no release with that version exists, CI checks, tests and builds all three systems, tags the commit `vX.Y.Z` and
+   publishes a GitHub release with exactly three programs, `Hyve-setup.exe`, `hyve-linux-x64` and `hyve-macos-arm64`,
+   plus `SHA256SUMS.txt`.
+4. Installed copies find the release on GitHub by themselves (15 seconds after start and every 6 hours, or with
+   *About → Check for updates*).
 
-- Everything stays on your machine. Hyve talks to the internet only to download the Hytale downloader /
-  server files (Hypixel), Minecraft servers and loaders (Mojang, FabricMC, QuiltMC, MinecraftForge, NeoForged),
-  Temurin Java (Adoptium) and its own updates (GitHub), to sign servers in with your Hytale
-  account (Hypixel's OAuth and session services), and to look up your public IP for the Copy button (api.ipify.org).
-- The Hytale account login (a refresh token) is kept in `data/hytale-account.json` (owner-only permissions on
-  Linux / macOS). Settings → Hytale account → **Sign out** deletes it.
-- The web UI requires a random 256-bit token; cookies are `HttpOnly; SameSite=Strict` and cross-origin requests are
-  refused. Desktop mode listens on `127.0.0.1` only unless you allow the network in Settings.
-- Uploaded mods are checked (name, `.jar` / `.zip`, zip signature) and land only in that instance's `mods/` folder.
-- Updates install only files whose SHA-256 matches the release's `SHA256SUMS.txt`.
+### How updates are applied
 
-## 🛠️ Building from source
+**Download & install** fetches this system's file into `data/updates/`, checks it against `SHA256SUMS.txt`, stops your
+servers cleanly and then
 
-**Windows:** double-click **`run.bat`**: it builds the program and (if Inno Setup 6 is installed) the setup, copies
-them to `dist\` and starts Hyve.
+- **Windows:** runs `Hyve-setup.exe` silently with the current install folder; it replaces the program and starts it.
+- **Linux / macOS:** swaps the program in place (re-signing the app on macOS) and starts it again with the same options.
 
-| Command | What it does |
-|---|---|
-| `run.bat` | build program + setup → `dist\` → launch |
-| `run.bat build` | the same without launching |
-| `run.bat quick` | program only, then launch |
-| `run.bat headless` | build, then run the web UI only |
+An update replaces the program only; `data/` is never touched.
 
-**By hand, any system:**
+### Building from source
+
+**Windows:** `run.bat` builds the program and (with Inno Setup 6) the setup into `dist\` and starts Hyve
+(`run.bat build`, `run.bat quick`, `run.bat headless`). Any system:
 
 ```bash
 cargo build --release                         # desktop + web → target/release/hyve(.exe)
-cargo build --release --no-default-features   # no native window (Windows / macOS use a browser app window)
+cargo build --release --no-default-features   # no native window
 ```
 
-No system libraries are needed on Linux (the program never links GTK / WebKit). Icons are drawn by
-`scripts/make-icons.ps1`. A copy built from source never replaces itself with a download.
+No system libraries are needed on Linux (the program never links GTK / WebKit). A copy built from source never
+replaces itself with a download and keeps its data in the per-user folder.
 
-## 🏷️ Versions and releases
-
-`Cargo.toml` holds the version; the setup script and `Info.plist` follow it. Note changes under `[Unreleased]` in
-[CHANGELOG.md](CHANGELOG.md), then:
-
-```powershell
-scripts\bump-version.ps1            # patch, or: minor | major | 1.2.3
-git commit -am "Release vX.Y.Z: what changed"
-git push                            # or push from GitHub Desktop
-```
-
-A push to `main` with a version that has no release yet makes the **Build** workflow run the checks, build on
-GitHub's Windows, Linux and macOS runners, create the tag `vX.Y.Z` and publish:
-
-| File | |
-|---|---|
-| `Hyve-setup.exe` | Windows: install and update |
-| `hyve-linux-x64` | Linux: desktop and headless in one; installs and updates itself |
-| `hyve-macos-arm64` | macOS: installs itself as Hyve.app; what an update downloads |
-| `SHA256SUMS.txt` | checksums of the three |
-
-## 🧪 Tests
+### Tests
 
 ```bash
-cargo test                                        # unit tests: parsing, zips, worlds, mods, updater, web auth…
+cargo test
 cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --no-default-features -- -D warnings
 ```
 
-## 🗂️ Project layout
+</details>
 
-```
-run.bat, scripts/            one-click build, version bump, icon generator
-.github/workflows/build.yml  checks on 3 systems → release builds → tag + release
-installer/                   hyve.iss (Windows setup), Info.plist (macOS app)
-assets/                      logo, icons, style.css, app.js (drag & drop) - embedded in the program
-src/                         the Rust program (see CLAUDE.md for a file-by-file map)
-```
+## 🙏 Credits
 
-## 🩺 Troubleshooting
-
-| Problem | What to do |
-|---|---|
-| "Java 25 or newer is required" | Dashboard or Settings → **Install Java 25 (Temurin)**, or set the path to your own Java 25. |
-| Players can't connect | Forward / allow **UDP** (not TCP) on the instance's port. On the server, check the **Log in** banner: an unauthenticated server rejects players. |
-| The server forgets its login after a restart | Hyve sends `/auth persistence Encrypted` after each sign-in; use **Sign in again** on the instance page, or type it in the console. |
-| The sign-in code expired | Start the download again (or **Sign in again** for a server): a new code appears. Server versions → **Sign out** forgets the downloader's saved login. |
-| The player list stays empty | The console wording may differ in your Hytale version: set your own join / leave patterns in Settings. |
-| Downloader on a Mac | Hypixel ships it for Windows and Linux only: use **Import from your Hytale launcher**. |
-| Linux: the UI opens as a browser tab | Install Chrome, Chromium, Edge or Brave for a separate app window, or keep the tab and use **Quit Hyve** in the sidebar. |
-| macOS: "hyve-macos-arm64 can't be opened" | `xattr -d com.apple.quarantine hyve-macos-arm64`, or right-click → *Open* (it is signed ad hoc). |
-| Minecraft: "needs Java N" | Hyve installs it by itself (Tasks); press Start again when it is done. Or set a Java path in the instance's Settings. |
-| Minecraft: a mod crashes the server | Check it is made for the instance's loader and Minecraft version; switch it off in the Mods tab. |
-| Forgot the web link | `hyve --print-url`, or Settings → Web UI in the desktop window. |
-
-## 📄 License
-
-Hyve is **source-available**, not open source: you may use the releases, read the code and modify it
-privately, but not redistribute it or use it commercially. See [LICENSE](LICENSE). Third-party components keep
-their own licenses. Hytale is a trademark of Hypixel Studios; Minecraft is a trademark of Mojang / Microsoft. Hyve is
-not affiliated with either. Running a Minecraft server requires accepting the [Minecraft EULA](https://aka.ms/MinecraftEULA).
+Hytale is a trademark of Hypixel Studios; Minecraft is a trademark of Mojang / Microsoft. Hyve is not affiliated with
+either. Running a Minecraft server requires accepting the [Minecraft EULA](https://aka.ms/MinecraftEULA).
+Third-party components keep their own licenses.
 
 ---
 
 <div align="center">
 
-<img src="assets/logo.svg" width="40" alt="Hyve logo">
+**Made with ❤️ by [Akulav](https://github.com/Akulav)**
 
-**Made by [Akulav](https://github.com/Akulav)**
+<sub>© 2026 Akulav. Source-available under the <a href="LICENSE">Akulav Source-Available License</a>.</sub>
 
 </div>

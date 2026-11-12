@@ -47,6 +47,7 @@ Usage: hyve [options]
   --data-dir <path>   where instances, versions and backups live
   --print-url         print the web UI address (with its access token) and quit
   --install           Linux / macOS: install this program for your user, then quit
+  --install-dir <path>  with --install: the install folder (the program and all its data go there)
   --uninstall         Linux / macOS: remove the installed program (add --delete-data to remove the data too)
   --version           print the version and quit
   --help              this text
@@ -61,6 +62,7 @@ struct Args {
     data_dir: Option<PathBuf>,
     print_url: bool,
     install: bool,
+    install_dir: Option<PathBuf>,
     uninstall: bool,
     delete_data: bool,
     version: bool,
@@ -80,6 +82,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             "--data-dir" => a.data_dir = Some(PathBuf::from(value("--data-dir")?)),
             "--print-url" => a.print_url = true,
             "--install" => a.install = true,
+            "--install-dir" => a.install_dir = Some(PathBuf::from(value("--install-dir")?)),
             "--uninstall" => a.uninstall = true,
             "--delete-data" => a.delete_data = true,
             "--version" | "-V" => a.version = true,
@@ -201,7 +204,7 @@ fn main() {
         return;
     }
     if args.install || args.uninstall {
-        let r = if args.install { selfinstall::install_cli() } else { selfinstall::uninstall_cli(args.delete_data) };
+        let r = if args.install { selfinstall::install_cli(args.install_dir.clone()) } else { selfinstall::uninstall_cli(args.delete_data) };
         match r {
             Ok(msg) => println!("{msg}"),
             Err(e) => {

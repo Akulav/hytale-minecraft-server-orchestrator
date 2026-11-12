@@ -5,6 +5,19 @@ version becomes a GitHub release with this file's section as its notes.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-12
+### Changed
+- **Everything lives in the install folder you choose.** Linux and macOS now ask for the install folder (default
+  `~/.local/share/Hyve` / `~/Applications/Hyve`, or `--install --install-dir <folder>`), and servers, versions, backups,
+  Java and settings go to `data/` in that folder. The folder is remembered, so a newer download offers to update it.
+- macOS: the app now lives in `<folder>/Hyve.app` with its data in `<folder>/data`. Installing over an older
+  `~/Applications/Hyve.app` moves it and its data (`~/Library/Application Support/Hyve/data`) into the folder.
+- New README in the same style as the other Akulav apps.
+
+### Fixed
+- Data from older versions is now moved next to the installed program even when the install folder is on another
+  drive (it is copied, then the old copy removed); before, it stayed in `%LOCALAPPDATA%\Hyve\data`.
+
 ## [0.6.0] - 2026-11-10
 ### Changed
 - Instances may **share a port**: creating or saving one with the port of another instance is no longer refused.

@@ -99,11 +99,25 @@ impl Paths {
     /// `default_root` for a given program path and per-user folder (testable).
     pub fn choose_root(exe: &Path, legacy: PathBuf) -> (PathBuf, Option<String>) {
         let exe = exe.to_path_buf();
-        let in_bundle = cfg!(target_os = "macos") && crate::updater::app_bundle(&exe).is_some();
-        if crate::updater::self_built(&exe) || in_bundle {
+        if crate::updater::self_built(&exe) {
             return (legacy, None);
         }
-        let Some(dir) = exe.parent() else { return (legacy, None) };
+        // macOS: the install folder is the one holding `Hyve.app` (`<folder>/Hyve.app` + `<folder>/data`).
+        // Before 0.6.1 the app sat straight in an Applications folder with its data in the per-user folder:
+        // such a copy keeps that data until it is installed into a folder of its own.
+        let bundle = crate::updater::app_bundle(&exe).filter(|_| cfg!(target_os = "macos"));
+        let dir = match &bundle {
+            Some(app) => match app.parent() {
+                Some(p) if p.file_name().is_some_and(|n| n == "Applications") => return (legacy, None),
+                Some(p) => p.to_path_buf(),
+                None => return (legacy, None),
+            },
+            None => match exe.parent() {
+                Some(d) => d.to_path_buf(),
+                None => return (legacy, None),
+            },
+        };
+        let dir = dir.as_path();
         let here = dir.join("data");
         if here.is_dir() || here == legacy {
             return (here, None);
@@ -118,11 +132,11 @@ impl Paths {
                 let n = e.file_name().to_string_lossy().to_lowercase();
                 n.starts_with("unins") && n.ends_with(".exe")
             }));
-            if !installed.unwrap_or(false) {
+            if !installed.unwrap_or(false) && !crate::selfinstall::is_install_folder(dir) {
                 return (legacy, None);
             }
-            // bring it next to the program (instant on the same drive)
-            return match std::fs::rename(&legacy, &here) {
+            // bring it next to the program (instant on the same drive, copied across drives)
+            return match move_tree(&legacy, &here) {
                 Ok(()) => (here.clone(), Some(format!("moved the data from {} to {}", legacy.display(), here.display()))),
                 Err(e) => (
                     legacy.clone(),
@@ -164,6 +178,37 @@ impl Paths {
     fn registry_file(&self) -> PathBuf {
         self.root.join("instances.json")
     }
+}
+
+/// Copy a file or a whole folder tree.
+fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if src.is_dir() {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            copy_tree(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        std::fs::copy(src, dst).map(|_| ())
+    }
+}
+
+/// Move a folder: a rename on the same drive; across drives (`C:` → `D:`) it is copied and then the
+/// original is deleted. A failed copy removes the partial copy and leaves the original as it was.
+pub fn move_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if let Some(p) = dst.parent() {
+        std::fs::create_dir_all(p)?;
+    }
+    if std::fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    if let Err(e) = copy_tree(src, dst) {
+        let _ = std::fs::remove_dir_all(dst);
+        return Err(e);
+    }
+    let _ = std::fs::remove_dir_all(src);
+    Ok(())
 }
 
 /// Can we create files in `dir`?

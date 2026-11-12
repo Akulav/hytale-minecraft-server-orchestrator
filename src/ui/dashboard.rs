@@ -14,6 +14,7 @@ pub fn Dashboard(nav: Signal<Page>, tick: u64) -> Element {
     let offer = state.install_offer.read().clone();
     let mut dismissed = use_signal(|| false);
     let st_install = state.clone();
+    let st_folder = state.clone();
     let host = state.host.read().clone();
     let instances = state.instances.read().clone();
     let java = state.java.read().clone();
@@ -46,7 +47,16 @@ pub fn Dashboard(nav: Signal<Page>, tick: u64) -> Element {
                         "Update the installed copy? Its servers and data stay as they are."
                     } else {
                         b { "Install Hyve for your user? " }
-                        "It goes to {o.target.display()} with a menu entry and icon; later updates install themselves. Or keep running it from here."
+                        "Choose a folder: Hyve and everything it keeps (servers, versions, backups, Java) go there, with a menu entry and icon; later updates install into the same folder. Or keep running it from here."
+                        label { class: "field",
+                            span { "Install folder" }
+                            input { class: "input mono", value: "{o.target.display()}",
+                                oninput: {
+                                    let st = st_folder.clone();
+                                    move |e: FormEvent| if let Some(off) = st.install_offer.write().as_mut() { off.target = std::path::PathBuf::from(e.value()) }
+                                }
+                            }
+                        }
                     }
                     div { class: "banner-actions",
                         button { class: "btn sm primary", onclick: move |_| {
