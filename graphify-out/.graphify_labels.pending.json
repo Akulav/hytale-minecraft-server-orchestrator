@@ -1,0 +1,20 @@
+{
+  "0": "Shared",
+  "3": "process.rs",
+  "13": "install",
+  "16": "ui/instance.rs",
+  "18": "InstanceConfig",
+  "19": "Game",
+  "20": "classify",
+  "22": "run_downloader",
+  "23": "Value",
+  "27": "T",
+  "31": "EventHandler",
+  "40": "File",
+  "43": "IpAddr",
+  "48": "Mutex",
+  "49": "OnceLock",
+  "50": "Regex",
+  "51": "AtomicBool",
+  "52": "F"
+}
